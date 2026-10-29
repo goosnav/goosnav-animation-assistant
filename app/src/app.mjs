@@ -5,6 +5,8 @@ import { saveState, loadState, listSaved, loadSaved, localApp, quitLocal } from 
 import { packProject, unpackProject } from './archive.mjs';
 import { download, shareFiles, imageZip, normalizeImage, ImageCache, layeredPSD, decodeImage, thumbnail } from './images.mjs';
 import { exportMP4, probeMP4, microphone, fitVoice, validateVideo } from './video.mjs';
+import { makeTransfer, validateTransfer, transferSlots, assignTransferFrames } from './drawing-transfer.mjs';
+import { exportFrameVideo, extractDrawingFrames } from './frame-video.mjs';
 
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const tabs=['stage','rehearse','draw','assemble','finish'];
@@ -14,6 +16,7 @@ const pretty=s=>s.replaceAll('-',' ').replace(/^./,c=>c.toUpperCase());
 let state={project:newProject(),takes:{},art:{},refs:{},recording:null,video:null,thumbs:{},artThumbs:{}},clip=null,stage,tab='stage',time=0;
 let closing=false,busy=null,playing=false,playToken=0,source=null,context,cache,renderTicket=0,saveTimer,saveChain=Promise.resolve(),mic=null,recordingActive=false,recordingToken=0;
 let imports=[],order=[],undo=[],redo=[],lastHistory,urls=[],voiceUrl,returnedUrl,finalUrl,finalBlob,referenceFiles=[];
+let drawingVideoBlob,drawingVideoUrl;
 const p=()=>state.project;
 function status(message,error=false){$('#status').textContent=message;$('#status').classList.toggle('error',error);}
 function audioContext(){return context??=new AudioContext();}
@@ -28,13 +31,22 @@ function flushSave(){
  saveChain=saveChain.catch(()=>{}).then(()=>saveState(copy)).then(()=>$('#saved').textContent='Saved on this device').catch(e=>{$('#saved').textContent='Not saved — download a backup';status(`Autosave unavailable: ${e.message}`,true);throw e;});return saveChain;
 }
 function clearExport(){finalBlob=null;if(finalUrl)URL.revokeObjectURL(finalUrl);finalUrl=null;$('#final-video').removeAttribute('src');$('#final-video').load();$('#export-result').hidden=true;}
+function clearDrawingVideo(){drawingVideoBlob=null;if(drawingVideoUrl)URL.revokeObjectURL(drawingVideoUrl);drawingVideoUrl=null;$('#drawing-video-preview').removeAttribute('src');$('#drawing-video-preview').load();$('#drawing-video-result').hidden=true;}
+function refreshTransfer(){
+ const transfer=state.transfer;
+ if(!transfer){$('#transfer-summary').textContent='Export a drawing-reference video in Draw first.';return;}
+ const label=`Reference set ${transfer.id.slice(0,8)} · ${transfer.slots.length} frames · ${transfer.width} × ${transfer.height}.`;
+ let note=' Choose the drawn MP4 made from this reference set.';
+ try{if(clip)transferSlots(transfer,p(),clip);else note=' Generate dialogue in Rehearse before importing.';}catch(e){note=' '+e.message;}
+ $('#transfer-summary').textContent=label+note;
+}
 function invalidateVideo(){clearExport();if(state.recording){state.voiceStale=true;$('#voice-stale').hidden=false;}}
 function recompile(){
  if(!Object.keys(state.takes).length){clip=null;return;}
  try{clip=compileClip(p(),state.takes,p().slots);p().slots=clip.slots;}catch{clip=null;}
 }
 function changed({speech=false}={}){
- stopPlayback();remember();invalidateVideo();
+ stopPlayback();remember();invalidateVideo();clearDrawingVideo();
  if(speech){state.takes={};clip=null;p().overrides=[];}else recompile();
  referenceFiles=[];$('#share-controls').hidden=true;refreshStats();renderReferences();save();renderPreview().catch(e=>status(e.message,true));
 }
@@ -58,6 +70,7 @@ async function renderPreview(){
 }
 function updateClock(){const d=currentDuration()||0;$('#scrub').max=d;$('#scrub').step=1/p().fps;$('#scrub').value=time;$('#time').textContent=`${time.toFixed(2)} / ${d.toFixed(2)} s`;}
 function refreshStats(){
+ refreshTransfer();
  const n=slots().length,done=slots().filter(s=>state.art[s.id]).length;
  $('#drawing-count').textContent=clip?n:'—';$('#duration').textContent=clip?clip.duration.toFixed(1):'—';$('#art-count').textContent=done;
  $('#budget').textContent=n>23?`${n} drawings. Consider fewer acting changes or a shorter clip to stay under 24.`:'Bodies hold still. Mouth drawings repeat automatically.';
@@ -65,7 +78,7 @@ function refreshStats(){
 }
 function showTab(next){tab=next;$$('[data-view]').forEach(e=>e.hidden=e.dataset.view!==tab);$('#saved-clips').ontoggle=async()=>{if(!$('#saved-clips').open)return;try{const saved=await listSaved();$('#saved-list').innerHTML=saved.length?saved.map(s=>`<button data-open-saved="${esc(s.id)}">${esc(s.title)}</button>`).join(''):'No saved clips yet.';}catch(e){status(e.message,true);}};
 $('#saved-list').onclick=e=>{const id=e.target.closest('[data-open-saved]')?.dataset.openSaved;if(id)run('Opening saved clip…',async()=>{await flushSave();await restore(await loadSaved(id));$('#saved-clips').open=false;status('Project restored.');});};
-$$('[data-tab]').forEach(e=>{if(e.dataset.tab===tab)e.setAttribute('aria-current','step');else e.removeAttribute('aria-current');});$('#footer-label').textContent={stage:'Set the scene',rehearse:'Adjust the performance',draw:'Draw in Procreate',assemble:'Number your drawings',finish:'Voice and export'}[tab];$('#back').disabled=tabs.indexOf(tab)===0;$('#next').hidden=tab==='finish';if(stage)stage.controls.enabled=tab==='stage'&&!busy;}
+$$('[data-tab]').forEach(e=>{if(e.dataset.tab===tab)e.setAttribute('aria-current','step');else e.removeAttribute('aria-current');});$('#footer-label').textContent={stage:'Set the scene',rehearse:'Adjust the performance',draw:'Draw in Procreate',assemble:'Import your drawn video',finish:'Voice and export'}[tab];$('#back').disabled=tabs.indexOf(tab)===0;$('#next').hidden=tab==='finish';if(stage)stage.controls.enabled=tab==='stage'&&!busy;}
 function slider(label,key,value,min,max,step=1,attrs=''){
  return `<label>${esc(label)} <output>${Number(value).toFixed(step<1?2:0)}</output><input type="range" data-key="${key}" ${attrs} min="${min}" max="${max}" step="${step}" value="${value}"></label>`;
 }
@@ -104,7 +117,7 @@ async function run(label,fn){
  finally{busy=null;$$('button,input,select,textarea').forEach(e=>e.disabled=false);$('#busy-panel').hidden=true;showTab(tab);$('#audio-mode option[value=robot]').disabled=!!state.video;if(!closing)save();}
 }
 function requireClip(){if(!clip)throw Error('Generate the animation in Rehearse first.');}
-function requireArt(){requireClip();if(slots().some(s=>!state.art[s.id]))throw Error('Import and number all the drawings before exporting the finished clip.');}
+function requireArt(){requireClip();if(slots().some(s=>!state.art[s.id]))throw Error('Import your drawn video or assign all drawings before exporting the finished clip.');}
 async function selectedAudio(duration){
  const c=audioContext();if(p().audioMode==='silent')return null;
  if(p().audioMode==='recording'){if(!state.recording)throw Error('Record a voiceover first, or choose Robot voice / Silent.');return fitVoice(c,await c.decodeAudioData(await state.recording.arrayBuffer()),duration,p());}
@@ -128,6 +141,37 @@ async function prepareDrawings(signal){
  state.refs=fresh;referenceFiles=slots().map((s,i)=>new File([fresh[s.id]],`${String(i+1).padStart(2,'0')}-${s.id}.png`,{type:'image/png'}));
  $('#share-batch').innerHTML=Array.from({length:Math.ceil(referenceFiles.length/6)},(_,i)=>option(String(i),`Images ${i*6+1}–${Math.min(referenceFiles.length,(i+1)*6)}`,i?'':'0')).join('');
  $('#share-controls').hidden=false;renderReferences();status(`${referenceFiles.length} drawings ready. Tap Share drawings, then Save Images in the iPad share sheet.`);
+}
+async function prepareDrawingVideo(signal){
+ requireClip();const transfer=makeTransfer(p(),clip);
+ await prepareDrawings(signal);signal.throwIfAborted();
+ const canvas=document.createElement('canvas');canvas.width=transfer.width;canvas.height=transfer.height;
+ const ctx=canvas.getContext('2d'),images=new ImageCache(state.refs);
+ try{
+  status(`Encoding ${transfer.slots.length} unique drawings at 6 fps…`);
+  const blob=await exportFrameVideo({canvas,frameCount:transfer.slots.length,signal,onProgress:f=>{$('#progress').value=f;},drawFrame:async i=>{ctx.drawImage(await images.get(transfer.slots[i].id),0,0,canvas.width,canvas.height);}});
+  signal.throwIfAborted();
+  // Save the mapping before exposing the download. Otherwise leaving for Procreate could lose it.
+  const previous=state.transfer;state.transfer=transfer;
+  try{await flushSave();}catch(e){state.transfer=previous;throw e;}
+  clearDrawingVideo();drawingVideoBlob=blob;drawingVideoUrl=URL.createObjectURL(blob);
+  $('#drawing-video-preview').src=drawingVideoUrl;$('#drawing-video-result').hidden=false;
+  $('#drawing-video-info').textContent=`${transfer.slots.length} drawing frames · 6 fps · reference set ${transfer.id.slice(0,8)}. Save to Photos or Files, then import in Procreate.`;
+  refreshTransfer();status('Drawing video ready. Share or download it, then trace the frames in Procreate.');
+ }finally{images.clear();canvas.width=1;canvas.height=1;}
+}
+async function importDrawingVideo(file,signal){
+ requireClip();const transfer=state.transfer;transferSlots(transfer,p(),clip);
+ const frames=await extractDrawingFrames(file,{width:transfer.width,height:transfer.height,expectedCount:transfer.slots.length,signal,onProgress:f=>{$('#progress').value=f;}});
+ const next=assignTransferFrames(transfer,p(),clip,frames,state.art),thumbs={...state.artThumbs};
+ for(const [i,s]of transfer.slots.entries()){signal.throwIfAborted();thumbs[s.id]=await thumbnail(frames[i]);}
+ signal.throwIfAborted();
+ state.art=next;state.artThumbs=thumbs;state.video=null;time=0;
+ if(returnedUrl)URL.revokeObjectURL(returnedUrl);returnedUrl=null;$('#returned-video').removeAttribute('src');$('#returned-video').load();
+ $('#remove-video').hidden=true;$('#audio-mode option[value=robot]').disabled=false;
+ imports.forEach(i=>URL.revokeObjectURL(i.url));imports=[];order=[];renderImports();
+ cache?.clear();cache=null;invalidateVideo();$('#show-art').checked=true;renderAssigned();refreshStats();await renderPreview();
+ status(`Drawings extracted and assembled. ${frames.length} drawings now follow your ${clip.duration.toFixed(1)}-second dialogue. Review the numbered drawings and play the animation, then continue to voiceover.`);
 }
 async function exportClip(reference,signal){
  if(!state.video){reference?requireClip():requireArt();}
@@ -158,7 +202,7 @@ async function stopRecording(){
 }
 
 async function restore(loaded){
- validateProject(loaded.project);stopPlayback();clearTimeout(saveTimer);clearExport();
+ validateProject(loaded.project);if(loaded.transfer!=null)validateTransfer(loaded.transfer);stopPlayback();clearTimeout(saveTimer);clearExport();clearDrawingVideo();
  imports.forEach(i=>URL.revokeObjectURL(i.url));imports=[];order=[];undo=[];redo=[];referenceFiles=[];
  $('#share-controls').hidden=true;$('#show-art').checked=false;renderImports();
  if(voiceUrl)URL.revokeObjectURL(voiceUrl);voiceUrl=null;$('#voice-review').removeAttribute('src');$('#voice-review').hidden=true;
@@ -193,6 +237,15 @@ $('#show-art').onchange=()=>{cache=null;renderPreview().catch(e=>status(e.messag
 $('#apply-mouth').onclick=()=>{try{requireClip();p().overrides.push({actor:Number($('#override-actor').value),mouth:$('#override-mouth').value,start:time,end:time+Number($('#override-frames').value)/p().fps});changed();}catch(e){status(e.message,true);}};
 $('#clear-mouths').onclick=()=>{p().overrides=[];changed();};
 $('#prepare').onclick=()=>run('Preparing your unique drawings…',prepareDrawings);
+$('#drawing-video').onclick=()=>run('Preparing your drawing-reference video…',prepareDrawingVideo);
+$('#download-drawing-video').onclick=()=>{if(drawingVideoBlob)download(drawingVideoBlob,filename(`-draw-${state.transfer.id.slice(0,8)}-6fps.mp4`));};
+$('#share-drawing-video').onclick=()=>{
+ if(!drawingVideoBlob)return;
+ const file=new File([drawingVideoBlob],filename(`-draw-${state.transfer.id.slice(0,8)}-6fps.mp4`),{type:'video/mp4'});
+ if(!navigator.canShare?.({files:[file]}))return status('Use Download drawing MP4 to save to Files. In Procreate, choose Import from the Gallery.');
+ shareFiles([file]).then(()=>status('Drawing video handed to the share sheet. Choose Save Video to keep it in Photos.')).catch(e=>status(e.name==='AbortError'?'Sharing cancelled. The drawing video is still ready.':e.message,e.name!=='AbortError'));
+};
+$('#import-drawing-video').onchange=e=>{const file=e.target.files[0];e.target.value='';if(file)run('Extracting your drawn frames…',signal=>importDrawingVideo(file,signal));};
 $('#share-all').onclick=()=>shareFiles(referenceFiles).then(()=>status('Images handed to the iPad share sheet. Check Photos before leaving.')).catch(e=>status(e.name==='AbortError'?'Sharing cancelled.':e.message,e.name!=='AbortError'));
 $('#share-small').onclick=()=>{const i=Number($('#share-batch').value);shareFiles(referenceFiles.slice(i*6,i*6+6)).catch(e=>status(e.message,true));};
 $('#reference-gallery').onclick=e=>{const id=e.target.closest('[data-share-ref]')?.dataset.shareRef;if(id){const i=slots().findIndex(s=>s.id===id),file=new File([state.refs[id]],`${i+1}-${id}.png`,{type:'image/png'});if(navigator.canShare?.({files:[file]}))shareFiles([file]).catch(e=>status(e.message,true));else download(file,file.name);}};
@@ -229,7 +282,7 @@ $('#save-project').onclick=()=>run('Preparing project backup…',async()=>{downl
 $('#open-project').onchange=e=>run('Opening project…',async()=>{const f=e.target.files[0];if(f){await flushSave();await restore(await unpackProject(f));status('Project restored.');}e.target.value='';});
 $('#new').onclick=()=>run('Starting a new clip…',async()=>{await flushSave();await restore({project:newProject()});imports=[];order=[];renderImports();undo=[];redo=[];showTab('stage');status('New clip. Your previous clip is in Saved clips on this device.');});
 $('#duplicate').onclick=()=>run('Duplicating this scene…',async()=>{await flushSave();const project=structuredClone(p());project.id=uid();project.title+=' — next shot';await restore({...state,project});showTab('stage');status('Scene duplicated. Your previous clip is saved; change this framing for your next shot.');});
-function travelHistory(from,to){if(!from.length)return;to.push(snapshot());state.project=JSON.parse(from.pop());lastHistory=snapshot();state.takes={};clip=null;referenceFiles=[];$('#share-controls').hidden=true;invalidateVideo();populate();save();renderPreview().catch(e=>status(e.message,true));status('Edit restored. Generate dialogue again to refresh timing.');}
+function travelHistory(from,to){if(!from.length)return;clearDrawingVideo();to.push(snapshot());state.project=JSON.parse(from.pop());lastHistory=snapshot();state.takes={};clip=null;referenceFiles=[];$('#share-controls').hidden=true;invalidateVideo();populate();save();renderPreview().catch(e=>status(e.message,true));status('Edit restored. Generate dialogue again to refresh timing.');}
 $('#undo').onclick=()=>travelHistory(undo,redo);$('#redo').onclick=()=>travelHistory(redo,undo);
 document.addEventListener('visibilitychange',()=>{if(document.hidden){if(recordingActive)stopRecording().catch(e=>status(e.message,true));stopPlayback();flushSave().catch(()=>{});}});
 window.addEventListener('pagehide',()=>{stopPlayback();flushSave().catch(()=>{});});

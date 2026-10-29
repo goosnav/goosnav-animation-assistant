@@ -5,13 +5,13 @@ export async function validateVideo(blob){
  try{await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('The exported video could not be opened')),10000);video.onloadeddata=()=>{clearTimeout(timer);resolve();};video.onerror=()=>{clearTimeout(timer);reject(Error('The exported video is not playable'));};video.src=url;video.load();});if(!video.videoWidth)throw Error('Video contains no picture');return {width:video.videoWidth,height:video.videoHeight,duration:video.duration};}
  finally{video.removeAttribute('src');video.load();URL.revokeObjectURL(url);}
 }
-async function webcodecs({canvas,duration,audio,draw,signal,onProgress=()=>{}}){
+async function webcodecs({canvas,duration,audio,draw,signal,fps=24,frameCount,onProgress=()=>{}}){
  const target=new BufferTarget(),out=new Output({format:new Mp4OutputFormat(),target});
- const source=new CanvasSource(canvas,{codec:'avc',bitrate:6_000_000});out.addVideoTrack(source,{frameRate:24});
+ const source=new CanvasSource(canvas,{codec:'avc',bitrate:6_000_000});out.addVideoTrack(source,{frameRate:fps});
  let sound;if(audio){sound=new AudioBufferSource({codec:'aac',bitrate:128000});out.addAudioTrack(sound);}
  try{await out.start();if(sound)await sound.add(audio);
-  const frames=Math.ceil(duration*24);
-  for(let i=0;i<frames;i++){signal?.throwIfAborted();await draw(i/24);await source.add(i/24,1/24);onProgress((i+1)/frames);if(i%12===0)await new Promise(r=>setTimeout(r,0));}
+  const frames=frameCount??Math.ceil(duration*fps);
+  for(let i=0;i<frames;i++){signal?.throwIfAborted();await draw(i/fps);await source.add(i/fps,1/fps);onProgress((i+1)/frames);if(i%12===0)await new Promise(r=>setTimeout(r,0));}
   source.close();sound?.close();await out.finalize();return new Blob([target.buffer],{type:'video/mp4'});
  }catch(e){await out.cancel().catch(()=>{});throw e;}
 }
@@ -37,10 +37,12 @@ async function realtime({canvas,duration,audio,draw,signal,onProgress=()=>{}}){
 }
 let aacReady;
 export async function exportMP4(options){
+ options.signal?.throwIfAborted();
  if(options.audio&&!(await canEncodeAudio('aac'))){aacReady??=import('@mediabunny/aac-encoder').then(m=>m.registerAacEncoder());await aacReady;}
  const capable=await canEncodeVideo('avc',{width:options.canvas.width,height:options.canvas.height})&&(!options.audio||await canEncodeAudio('aac',{sampleRate:options.audio.sampleRate,numberOfChannels:1}));
+ if(options.exactFrames&&!capable)throw Error('Exact drawing-video export is unavailable in this browser. Update iPadOS/Safari, or use the image options below.');
  let blob;
- if(capable){try{blob=await webcodecs(options);}catch(e){if(options.signal?.aborted)throw e;if(!mp4Mime(!!options.audio))throw e;options.onFallback?.();blob=await realtime(options);}}
+ if(capable){try{blob=await webcodecs(options);}catch(e){if(options.signal?.aborted||options.exactFrames)throw e;if(!mp4Mime(!!options.audio))throw e;options.onFallback?.();blob=await realtime(options);}}
  else {options.onFallback?.();blob=await realtime(options);}
  await validateVideo(blob);return blob;
 }

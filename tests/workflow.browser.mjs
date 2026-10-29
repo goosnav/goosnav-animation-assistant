@@ -14,6 +14,7 @@ test('iPad-sized workflow generates unique references and restores a saved clip'
   await page.getByText('Animation ready.',{exact:false}).waitFor({timeout:60000});
   const count=Number(await page.locator('#drawing-count').textContent());assert.ok(count>1&&count<=11);
   await page.getByRole('button',{name:'03 Draw',exact:true}).click();
+  await page.getByText('Image alternatives',{exact:true}).click();
   await page.getByRole('button',{name:'Prepare drawings',exact:true}).click();
   await page.locator('#reference-gallery img').first().waitFor({timeout:60000});
   assert.equal(await page.locator('#reference-gallery img').count(),count);
@@ -23,6 +24,7 @@ test('iPad-sized workflow generates unique references and restores a saved clip'
   const archive=unzipSync(await fs.readFile(await (await zipDownload).path()));
   const pngs=Object.entries(archive).filter(([name])=>name.endsWith('.png')).reverse();
   await page.getByRole('button',{name:'04 Assemble',exact:true}).click();
+  await page.getByText('Import individual images instead',{exact:true}).click();
   await page.locator('#import-images').setInputFiles(pngs.map(([name,buffer])=>({name,mimeType:'image/png',buffer:Buffer.from(buffer)})));
   await page.locator('#import-gallery button').last().waitFor();
   for(let i=count-1;i>=0;i--)await page.locator('#import-gallery button').nth(i).click();
