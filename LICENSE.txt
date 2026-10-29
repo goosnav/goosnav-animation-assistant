@@ -1,0 +1,8 @@
+Goosnav Animation Assistant
+
+Copyright (c) 2026 Goosnav. All rights reserved.
+Goosnav characters and artwork remain the owner's material. Their inclusion
+does not grant third-party publication, merchandising, or redistribution rights.
+
+Third-party components retain their respective licenses. See NOTICES.md and
+the bundled vendor notices. No ownership of third-party code is claimed.

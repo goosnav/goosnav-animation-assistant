@@ -1,0 +1,10 @@
+import http from 'node:http';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
+await import('./build.mjs');
+const root=path.resolve('dist'),port=Number(process.env.PORT||8793);
+const mime={'.html':'text/html','.mjs':'text/javascript','.css':'text/css','.wasm':'application/wasm','.glb':'model/gltf-binary','.json':'application/json'};
+const server=http.createServer(async(req,res)=>{try{const url=new URL(req.url,'http://localhost');const p=path.resolve(root,'.'+decodeURIComponent(url.pathname==='/'?'/index.html':url.pathname));if(!p.startsWith(root+path.sep)){res.writeHead(403).end();return;}const data=await fs.readFile(p);res.writeHead(200,{'Content-Type':mime[path.extname(p)]||'application/octet-stream','Cache-Control':'no-cache'}).end(data);}catch{res.writeHead(404).end('Not found');}});
+server.listen(port,'127.0.0.1',()=>{const url=`http://127.0.0.1:${server.address().port}`;console.log(`Animation Assistant: ${url}`);if(process.env.OPEN_BROWSER==='1'){const cmd=process.platform==='darwin'?'open':process.platform==='win32'?'explorer':'xdg-open';spawn(cmd,[url],{stdio:'ignore'}).on('error',()=>console.log(`Open ${url}`));}});
+server.on('error',e=>{console.error(e.message);process.exitCode=1;});

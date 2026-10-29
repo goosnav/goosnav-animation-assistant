@@ -1,0 +1,5 @@
+{
+  "name": "goosnav-animation-assistant",
+  "compatibility_date": "2026-10-29",
+  "assets": { "directory": "./dist" }
+}

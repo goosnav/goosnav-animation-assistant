@@ -1,0 +1,32 @@
+name: Verify application
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+      - run: python3 -m unittest discover -s tests -p '*_test.py'
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Browser round trip
+        run: |
+          mkdir -p .work
+          node tools/serve.mjs > .work/server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID"' EXIT
+          for attempt in $(seq 1 30); do curl --fail --silent http://127.0.0.1:8793/ > /dev/null && break; sleep 1; done
+          npm run test:browser
+      - uses: actions/upload-artifact@v4
+        with:
+          name: static-site
+          path: dist/

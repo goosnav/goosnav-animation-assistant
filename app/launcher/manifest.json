@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "app_id": "shop.goosnav.animation",
+  "display_name": "Goosnav Animation Assistant",
+  "python": "3.12.10",
+  "entry_module": "local_server",
+  "ready_path": "/health/ready",
+  "startup_timeout_seconds": 180,
+  "preferred_port": 8793,
+  "data_directory_name": "GoosnavAnimationAssistant"
+}

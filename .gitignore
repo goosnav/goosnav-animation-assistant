@@ -1,0 +1,10 @@
+node_modules/
+dist/
+release/
+.work/
+dev/
+.superpowers/
+AGENTS.md
+__pycache__/
+.venv/
+*.log

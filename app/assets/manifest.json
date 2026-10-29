@@ -1,0 +1,50 @@
+[
+  {
+    "file": "actor-blue.glb",
+    "sha256": "2fddb7acf93d9866f366a49bae0da5a09c10b0ac1a6f9ad88d819542c7671cef",
+    "source": "submodules/3D-comic-engine/assets/actor-blue.glb",
+    "sourceCommit": "7d9a08dd32072d28c28654f54ff88c52f75f8d21"
+  },
+  {
+    "file": "actor-blue-beady.glb",
+    "sha256": "3afd5c44e77c8619d7a3eea02f80719ad77d8061fd42d8bb4cb0e33164850a18",
+    "source": "submodules/3D-comic-engine/assets/actor-blue-beady.glb",
+    "sourceCommit": "7d9a08dd32072d28c28654f54ff88c52f75f8d21"
+  },
+  {
+    "file": "actor-rust.glb",
+    "sha256": "8209b55e0a7a5fd2e80f524628ffab9c39d50d4ddc17e0b7cbce801fd13f27b3",
+    "source": "submodules/3D-comic-engine/assets/actor-rust.glb",
+    "sourceCommit": "7d9a08dd32072d28c28654f54ff88c52f75f8d21"
+  },
+  {
+    "file": "actor-rust-beady.glb",
+    "sha256": "998da3e6280b3e71350082d060081188ef5c84899d92a7f3912daafec626b648",
+    "source": "submodules/3D-comic-engine/assets/actor-rust-beady.glb",
+    "sourceCommit": "7d9a08dd32072d28c28654f54ff88c52f75f8d21"
+  },
+  {
+    "file": "actor-olive.glb",
+    "sha256": "538335bdd3285c6dd2cca708c502be533ca7a29f88cf34fc4f10a6d4885ea47b",
+    "source": "submodules/3D-comic-engine/assets/actor-olive.glb",
+    "sourceCommit": "7d9a08dd32072d28c28654f54ff88c52f75f8d21"
+  },
+  {
+    "file": "actor-olive-beady.glb",
+    "sha256": "81cb37bfc60b58b7d9f12a52b11435ed7031293437553a23bd2d581a867b7e44",
+    "source": "submodules/3D-comic-engine/assets/actor-olive-beady.glb",
+    "sourceCommit": "7d9a08dd32072d28c28654f54ff88c52f75f8d21"
+  },
+  {
+    "file": "actor-billy.glb",
+    "sha256": "219ee960af26451d385ce711391b43e86830ee4d48754cdfc7db77c7dc173a98",
+    "source": "submodules/3D-comic-engine/assets/actor-billy.glb",
+    "sourceCommit": "7d9a08dd32072d28c28654f54ff88c52f75f8d21"
+  },
+  {
+    "file": "actor-gooby.glb",
+    "sha256": "82aa4fcb0f7c8e79d3fb4142ffa43d2c1bdf44b54c1ee4c27f6c1816cc4370e0",
+    "source": "submodules/3D-comic-engine/assets/actor-gooby.glb",
+    "sourceCommit": "7d9a08dd32072d28c28654f54ff88c52f75f8d21"
+  }
+]

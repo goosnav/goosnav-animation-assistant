@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#ffffff"><title>Goosnav Animation Assistant</title><link rel="stylesheet" href="style.css"><script type="module" src="app.mjs"></script></head>
+<body>
+<header><div><p class="eyebrow">GOOSNAV / DRAWING TOOLS</p><h1>Animation Assistant<span class="color-blocks" aria-hidden="true"><i></i><i></i><i></i></span></h1></div><div class="project-tools"><button id="new">New clip</button><button id="duplicate">Duplicate</button><button id="undo">Undo</button><button id="redo">Redo</button><details><summary>Project</summary><div class="menu"><button id="save-project">Save backup</button><label class="file-button">Open backup<input id="open-project" type="file" accept=".zip"></label><button id="quit-local" hidden>Quit local app</button><p>Projects autosave on this device. A backup moves your drawings and sound together.</p></div></details></div></header>
+<main>
+ <div class="project-title"><label>Clip title<input id="title" maxlength="200" value="An ordinary conversation"></label><p id="saved" role="status">Starting…</p></div>
+ <details id="saved-clips"><summary>Saved clips on this device</summary><div id="saved-list" class="button-list"></div></details>
+ <nav class="steps" aria-label="Animation steps"><button data-tab="stage" aria-current="step">01 Stage</button><button data-tab="rehearse">02 Rehearse</button><button data-tab="draw">03 Draw</button><button data-tab="assemble">04 Assemble</button><button data-tab="finish">05 Finish</button></nav>
+ <div id="status" class="status" role="status" aria-live="polite">Loading the character stage…</div>
+ <div id="busy-panel" hidden><progress id="progress"></progress><button id="cancel">Cancel</button></div>
+ <div class="workspace">
+  <aside class="preview-panel">
+   <div class="panel-heading"><h2>One scene. A few drawings.</h2><span id="preview-badge" class="tag">3D GUIDE</span></div>
+   <div id="preview-frame" class="portrait"><canvas id="stage-canvas" aria-label="3D scene preview"></canvas><canvas id="art-canvas" hidden aria-label="Hand-drawn animation preview"></canvas><video id="returned-video" hidden playsinline controls></video><div id="countdown" hidden></div></div>
+   <div class="playback"><button id="play" aria-label="Play animation">▶ Play</button><button id="prev-frame" aria-label="Previous frame">−1</button><button id="next-frame" aria-label="Next frame">+1</button><output id="time">0.00 / 0.00 s</output></div>
+   <label class="sr-only" for="scrub">Animation position</label><input id="scrub" type="range" min="0" max="1" value="0" step="0.083333">
+   <div class="stats"><div><strong id="drawing-count">—</strong><span>unique drawings</span></div><div><strong id="duration">—</strong><span>seconds</span></div><div><strong id="art-count">0</strong><span>drawings returned</span></div></div>
+   <p id="budget" class="hint">Bodies hold still. Mouth drawings repeat automatically.</p>
+   <label class="check"><input id="show-art" type="checkbox"> Preview my drawings</label>
+  </aside>
+  <div class="editor">
+   <section data-view="stage">
+    <div class="section-heading"><span class="step-number">01</span><div><h2>Set the scene</h2><p>Choose a view you want to draw once.</p></div></div>
+    <div class="field-pair"><label>Canvas<select id="format"><option value="portrait">Reel · 1080 × 1920</option><option value="landscape">Landscape · 1920 × 1080</option></select></label><label>Characters<select id="cast-count"><option value="1">One character</option><option value="2" selected>Two characters</option></select></label></div>
+    <div class="field-pair"><label>Guide style<select id="style"><option value="flat">Flat color + outlines</option><option value="line">White + outlines</option></select></label><label>Background<input id="background" type="color" value="#ffffff"></label></div>
+    <div class="subheading"><h3>Camera</h3><button id="reset-camera">Reset</button></div><p class="hint">Drag to orbit. Pinch to zoom; two fingers pan. Camera stays fixed during the clip.</p>
+    <div class="preset-row"><button data-framing="duet">Two shot</button><button data-framing="solo">Solo</button><button data-framing="close">Close-up</button><button data-framing="wide">Wide</button></div>
+    <label>Projection<select id="projection"><option value="orthographic">Flat / orthographic</option><option value="perspective">Perspective</option></select></label>
+    <div id="camera-fields" class="sliders"></div>
+    <h3 class="rule-heading">Characters</h3><div id="actor-fields"></div>
+   </section>
+   <section data-view="rehearse" hidden>
+    <div class="section-heading"><span class="step-number">02</span><div><h2>Say something</h2><p>The robot voice sets the timing. Rehearse it in your own voice.</p></div></div>
+    <div class="field-pair"><label>Speaking speed <output id="rate-label">1.00×</output><input id="rate" type="range" min=".5" max="2" step=".05" value="1"></label><label>Drawing rhythm<select id="fps"><option value="6">6 fps · very spare</option><option value="8">8 fps · spare</option><option value="12" selected>12 fps · clear speech</option></select></label></div>
+    <div id="lines"></div><button id="add-line">＋ Add dialogue</button>
+    <button id="generate" class="primary wide">Generate animation</button>
+    <p class="hint">Only mouths move unless you add an acting change. Faster playback changes timing, not how many times you draw a repeated mouth.</p>
+    <details><summary>Fine-tune a mouth</summary><p>Scrub to a moment, choose a mouth, and apply it for a few frames.</p><div class="field-pair"><label>Character<select id="override-actor"><option value="0">Character A</option><option value="1">Character B</option></select></label><label>Mouth<select id="override-mouth"></select></label><label>Frames<input id="override-frames" type="number" min="1" max="24" value="2"></label></div><button id="apply-mouth">Apply at playhead</button><button id="clear-mouths">Clear mouth edits</button></details>
+   </section>
+   <section data-view="draw" hidden>
+    <div class="section-heading"><span class="step-number">03</span><div><h2>Draw only what changes</h2><p>Save the references to Photos. Trace your base scene in Procreate, duplicate it, then change only the mouth or pose.</p></div></div>
+    <button id="prepare" class="primary wide">Prepare drawings</button>
+    <div id="share-controls" hidden><button id="share-all" class="primary wide">Share drawings → Photos</button><p class="hint">In the iPad share sheet, choose Save Images if available. Photos may display them in a different order; this gallery keeps the reference order.</p><div class="field-pair"><label>Smaller batch<select id="share-batch"></select></label><button id="share-small">Share this batch</button></div></div>
+    <div id="reference-gallery" class="gallery"></div>
+    <details><summary>Other export options</summary><div class="button-list"><button id="zip">Download PNG ZIP</button><button id="psd">Download layered PSD</button><button id="contact-sheet">Save contact sheet</button><button id="reference-video">Export tracing video</button></div><p class="hint">The PSD is a library of unique drawings, not a timed animation. For the fewest drawings, use the image workflow.</p></details>
+   </section>
+   <section data-view="assemble" hidden>
+    <div class="section-heading"><span class="step-number">04</span><div><h2>Bring your drawings back</h2><p>Choose all your finished images from Photos together. Then tap them here in reference order: 1, 2, 3…</p></div></div>
+    <label class="file-button primary wide">Choose drawings from Photos<input id="import-images" type="file" accept="image/png,image/jpeg,image/webp" multiple></label>
+    <div id="selection-tools" hidden><p id="selection-count"></p><div class="preset-row"><button id="selection-undo">Undo last tap</button><button id="selection-clear">Clear numbers</button></div><div id="import-gallery" class="gallery"></div><label>Image sizing<select id="image-fit"><option value="exact">Exact canvas size</option><option value="fit">Fit · preserve whole image</option><option value="crop">Crop · fill canvas</option></select></label><button id="use-drawings" class="primary wide">Use these drawings</button></div>
+    <div id="assigned-gallery" class="gallery"></div>
+    <details><summary>Already animated in Procreate?</summary><p>Import your finished video. Its timing is preserved; you can add a voiceover here.</p><label class="file-button">Choose finished video<input id="import-video" type="file" accept="video/*"></label><button id="remove-video" hidden>Use drawings instead</button></details>
+   </section>
+   <section data-view="finish" hidden>
+    <div class="section-heading"><span class="step-number">05</span><div><h2>Give it your voice</h2><p>Rehearse, record, and save your finished clip.</p></div></div>
+    <label>Final sound<select id="audio-mode"><option value="robot">Robot rehearsal voice</option><option value="recording">My recorded voice</option><option value="silent">Silent</option></select></label>
+    <button id="record" class="record wide">● Record voiceover</button><button id="stop-recording" hidden class="record wide">■ Stop recording</button>
+    <p class="hint">A three-second countdown, then the clip plays silently while you speak. Record again to replace the take.</p><audio id="voice-review" controls hidden></audio>
+    <div class="field-pair"><label>Voice offset (seconds)<input id="audio-offset" type="number" min="-30" max="30" step=".05" value="0"></label><label>Trim start (seconds)<input id="trim-start" type="number" min="0" max="120" step=".05" value="0"></label><label>Trim end (seconds)<input id="trim-end" type="number" min="0" max="120" step=".05" value="0"></label></div>
+    <p id="voice-stale" class="warning" hidden>Timing changed since this take. Play it back and adjust or record again.</p>
+    <button id="export" class="primary wide">Export finished MP4</button><div id="export-result" hidden><video id="final-video" controls playsinline></video><button id="share-video" class="primary wide">Share video → Photos</button><button id="download-video">Download MP4</button></div>
+    <p class="hint">One fixed-camera scene per clip. Duplicate it to make your next shot.</p>
+   </section>
+  </div>
+ </div>
+ <footer class="step-footer"><button id="back">← Back</button><span id="footer-label">Set the scene</span><button id="next" class="primary">Next →</button></footer>
+</main><noscript>This tool needs JavaScript to render your animation on this device.</noscript>
+</body></html>

@@ -1,0 +1,41 @@
+name: Build local universal ZIP (unverified platforms)
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - run: sudo apt-get update && sudo apt-get install -y llvm
+      - run: go install github.com/tc-hib/go-winres@v0.3.3
+      - name: Pinned AppImage build tool
+        run: |
+          mkdir -p .work/native-tools
+          curl --fail --location https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage --output .work/native-tools/appimagetool
+          echo 'ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  .work/native-tools/appimagetool' | sha256sum --check
+          chmod +x .work/native-tools/appimagetool
+      - run: npm ci --no-audit --no-fund && npm test && npm run build
+      - run: go test ./...
+        working-directory: tools/native/supervisor
+      - run: python3 -m unittest discover -s tests -p '*_test.py'
+      - name: Build launcher images
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+          APPIMAGETOOL: ${{ github.workspace }}/.work/native-tools/appimagetool
+        run: python3 tools/build-all-native.py
+      - run: python3 tools/package-local.py --fetch-tools
+      - uses: actions/upload-artifact@v4
+        with:
+          name: universal-zip-unverified-platforms
+          path: release/GoosnavAnimationAssistant-universal.zip
