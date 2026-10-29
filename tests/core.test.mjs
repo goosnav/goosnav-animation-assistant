@@ -6,7 +6,7 @@ const take = { duration: 1, phones: [{phone:'m',start:0,end:.2},{phone:'aa',star
 test('generated exposure sequence closes silence and reuses the same drawing', () => {
  const p = newProject(); p.lines = [{id:'a',actor:0,text:'Moo',rate:1,pause:.2,pose:'keep'}];
  const c=compileClip(p,{a:take});
- assert.equal(c.totalFrames,24); // .3 lead + 1 audio + .2 pause + .5 tail = 2 sec
+ assert.equal(c.totalFrames,48); // .3 lead + 1 audio + .2 pause + .5 tail = 2 sec
  assert.equal(c.slots.filter(s=>s.active).length,3);
  assert.equal(slotAt(c,0).state.mouths[0],'rest');
  assert.equal(slotAt(c,.7).state.mouths[0],'open');

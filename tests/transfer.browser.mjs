@@ -3,11 +3,19 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { build } from 'esbuild';
 import fs from 'node:fs/promises';
-import { unpackProject } from '../app/src/archive.mjs';
+import { packProject, unpackProject } from '../app/src/archive.mjs';
 import { compileClip, slotAt } from '../app/src/core.mjs';
+import { makeTransfer } from '../app/src/drawing-transfer.mjs';
 
 const harness = (await build({stdin:{contents:`export * from './app/src/video.mjs'; export * from './app/src/frame-video.mjs';
 import { Input, BlobSource, MP4, VideoSampleSink } from 'mediabunny';
+export async function inspectMovie(blob){
+ const input=new Input({source:new BlobSource(blob),formats:[MP4]});
+ try{const video=await input.getPrimaryVideoTrack(),audio=await input.getPrimaryAudioTrack(),stats=await video.computePacketStats();let peak=0;
+ if(audio){const ctx=new AudioContext();try{const decoded=await ctx.decodeAudioData(await blob.arrayBuffer());for(const value of decoded.getChannelData(0))peak=Math.max(peak,Math.abs(value));}finally{await ctx.close();}}
+ return {fps:stats.averagePacketRate,frames:stats.packetCount,audio:audio?await audio.getCodec():null,peak};
+ }finally{input.dispose();}
+}
 export async function samplePixels(blob,times){
  const input=new Input({source:new BlobSource(blob),formats:[MP4]}),canvas=document.createElement('canvas');canvas.width=1080;canvas.height=1920;
  try{const sink=new VideoSampleSink(await input.getPrimaryVideoTrack()),ctx=canvas.getContext('2d'),pixels=[];
@@ -60,10 +68,10 @@ test('exact drawing video preserves all frames in order, independently of return
 test('drawing video UI restores manifest, imports artwork atomically and rebuilds dialogue timing',async()=>{
  const {browser,page}=await setup();const errors=[];page.on('pageerror',e=>errors.push(e.message));
  try{
-  await page.locator('[data-tab=rehearse]').click();await page.locator('#generate').click();await page.getByText('Animation ready.',{exact:false}).waitFor({timeout:60000});
+  await page.locator('[data-tab=rehearse]').click();await page.locator('#generate').click();await page.getByText('Speech ready.',{exact:false}).waitFor({timeout:60000});
   const count=Number(await page.locator('#drawing-count').textContent()),duration=Number(await page.locator('#duration').textContent());
   await page.locator('[data-tab=draw]').click();await page.locator('#drawing-video').click();
-  await page.getByText('Drawing video ready.',{exact:false}).waitFor({timeout:90000});
+  await page.getByText('References ready.',{exact:false}).waitFor({timeout:90000});
   assert.equal(await page.locator('[data-view=draw]').isVisible(),true);
   await page.screenshot({path:'.work/video-reference-ipad.png',fullPage:true});
   const downloaded=page.waitForEvent('download');await page.locator('#download-drawing-video').click();const file=await downloaded;await file.saveAs('.work/drawing-reference.mp4');
@@ -80,16 +88,18 @@ test('drawing video UI restores manifest, imports artwork atomically and rebuild
   // Save a portable backup, then reload so transfer identity cannot rely on transient JS state.
   await page.locator('.project-tools summary').click();const backupWait=page.waitForEvent('download');await page.locator('#save-project').click();await (await backupWait).saveAs('.work/transfer-backup.zip');
   await page.reload();await page.getByText('Project restored.',{exact:false}).waitFor();
-  await page.locator('[data-tab=assemble]').click();assert.match(await page.locator('#transfer-summary').textContent(),new RegExp(`${count} frames`));
-  await page.locator('#import-drawing-video').setInputFiles('.work/drawing-return.mp4');
-  await page.getByText('Drawings extracted and assembled.',{exact:false}).waitFor({timeout:90000});
+  await page.locator('[data-tab=draw]').click();assert.equal(await page.locator('input[type=file][accept*=video]').count(),1);assert.equal(await page.locator('#import-artwork').isEnabled(),true);
+  await page.locator('#import-artwork').setInputFiles('.work/drawing-return.mp4');
+  await page.getByText(`${count} drawings imported.`,{exact:true}).waitFor({timeout:90000});
   assert.equal(await page.locator('#art-count').textContent(),String(count));assert.equal(await page.locator('#assigned-gallery img').count(),count);
-  assert.equal(await page.locator('#returned-video').isVisible(),false);assert.equal(await page.locator('#duration').textContent(),String(duration.toFixed(1)));
+  assert.equal(await page.locator('#returned-video').count(),0);assert.equal(await page.locator('#duration').textContent(),String(duration.toFixed(1)));
   // Failure must leave the successfully imported drawings and preview intact; same file can retry.
-  await page.locator('#import-drawing-video').setInputFiles({name:'bad.mp4',mimeType:'video/mp4',buffer:Buffer.from('broken')});
-  await page.locator('#status.error').waitFor();assert.equal(await page.locator('#art-count').textContent(),String(count));assert.equal(await page.locator('#import-drawing-video').inputValue(),'');
-  await page.locator('[data-tab=finish]').click();await page.locator('#audio-mode').selectOption('silent');await page.locator('#export').click();await page.getByText('MP4 ready.',{exact:false}).waitFor({timeout:90000});
-  assert.ok(await page.locator('#final-video').evaluate(v=>v.duration)>count/6+1);
+  await page.locator('#import-artwork').setInputFiles({name:'bad.mp4',mimeType:'video/mp4',buffer:Buffer.from('broken')});
+  await page.locator('#status.error').waitFor();assert.equal(await page.locator('#art-count').textContent(),String(count));assert.equal(await page.locator('#import-artwork').inputValue(),'');
+  await page.locator('[data-tab=finish]').click();assert.equal(await page.locator('#audio-mode').inputValue(),'robot');assert.equal(await page.locator('#voiceover-options').getAttribute('open'),null);await page.locator('#export').click();await page.getByText('Animation ready to save.',{exact:false}).waitFor({timeout:90000});
+  assert.ok(await page.locator('#final-video').evaluate(v=>v.duration)>count/24+1);
+  const movieInfo=await page.evaluate(async()=>{const {inspectMovie}=await import('/test-video.mjs');return inspectMovie(await (await fetch(document.querySelector('#final-video').src)).blob());});
+  assert.ok(Math.abs(movieInfo.fps-24)<.01);assert.equal(movieInfo.audio,'aac');assert.ok(movieInfo.peak>.05,'default export must contain audible robot speech');
   const saved=await unpackProject(new Blob([await fs.readFile('.work/transfer-backup.zip')]));
   const planned=compileClip(saved.project,saved.takes,saved.project.slots);
   const times=[0,.4,.7,1,2,3,5];
@@ -99,12 +109,42 @@ test('drawing video UI restores manifest, imports artwork atomically and rebuild
    const expected=[20+referenceIndex*20,30,220];
    for(let channel=0;channel<3;channel++)assert.ok(Math.abs(actualPixels[i][channel]-expected[channel])<15,`Wrong drawing at ${time}s: ${actualPixels[i]} vs ${expected}`);
   }
+  // Speech speed must regenerate audio and phonemes without asking for a second Generate click.
+  await page.locator('#rate').fill('1.5');await page.locator('#rate').dispatchEvent('change');await page.getByText('Speech ready.',{exact:true}).waitFor({timeout:60000});
+  assert.ok(Number(await page.locator('#duration').textContent())<duration*.85);assert.equal(await page.locator('#art-count').textContent(),String(count));
+  assert.equal(await page.locator('#audio-mode').inputValue(),'robot');await page.locator('#export').click();await page.getByText('Animation ready to save.',{exact:true}).waitFor({timeout:90000});
+  const faster=await page.evaluate(async()=>{const {inspectMovie}=await import('/test-video.mjs');return inspectMovie(await (await fetch(document.querySelector('#final-video').src)).blob());});
+  assert.equal(faster.audio,'aac');assert.ok(faster.peak>.05);assert.ok(faster.frames<movieInfo.frames*.85);assert.ok(Math.abs(faster.fps-24)<.01);
   await page.screenshot({path:'.work/video-transfer-ipad.png',fullPage:true});
   await page.locator('#new').click();await page.getByText('New clip.',{exact:false}).waitFor();await page.locator('[data-tab=draw]').click();assert.equal(await page.locator('#drawing-video-result').isVisible(),false);
-  await page.locator('[data-tab=assemble]').click();assert.match(await page.locator('#transfer-summary').textContent(),/Export a drawing-reference video/);
+  assert.equal(await page.locator('#import-artwork').isDisabled(),true);
   await page.locator('.project-tools summary').click();await page.locator('#open-project').setInputFiles('.work/transfer-backup.zip');await page.getByText('Project restored.',{exact:false}).waitFor();
-  assert.match(await page.locator('#transfer-summary').textContent(),new RegExp(`${count} frames`));
-  await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  assert.equal(await page.locator('#import-artwork').isEnabled(),true);
+  // A saved project from the removed importer must recover artwork, never passthrough.
+  const legacy={...saved,project:{...saved.project,fps:6,audioMode:'silent'},transfer:{...saved.transfer,version:1,fps:6},video:new Blob([Buffer.from(returned)],{type:'video/mp4'}),art:{}};
+  await fs.writeFile('.work/legacy-video.zip',Buffer.from(await (await packProject(legacy)).arrayBuffer()));
+  await page.locator('#open-project').setInputFiles('.work/legacy-video.zip');await page.getByText('Project restored.',{exact:true}).waitFor({timeout:60000});
+  assert.equal(await page.locator('#art-count').textContent(),String(count));assert.equal(await page.locator('#audio-mode').inputValue(),'robot');
+  assert.equal(await page.locator('#duration').textContent(),duration.toFixed(1));
+  await page.setViewportSize({width:390,height:844});await page.locator('[data-tab=draw]').click();await page.evaluate(()=>scrollTo(0,0));
+  const uploadBox=await page.locator('label:has(#import-artwork)').boundingBox();assert.ok(uploadBox.y+uploadBox.height<844,'Upload should be visible without scrolling on a phone');
+  await page.locator('#assigned-gallery button').nth(2).click();await page.waitForFunction(()=>document.querySelectorAll('#assigned-gallery button')[2]?.getAttribute('aria-pressed')==='true');assert.equal(await page.locator('#assigned-gallery button').nth(2).getAttribute('aria-pressed'),'true');
+  await page.screenshot({path:'.work/simplified-phone.png',fullPage:true});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  await page.locator('[data-tab=rehearse]').click();await page.locator('textarea').first().fill('New dialogue.');await page.locator('textarea').first().dispatchEvent('change');
+  await page.locator('[data-tab=draw]').click();assert.equal(await page.locator('#assigned-gallery button').count(),0);
+  // Genuine old sampling omitted a short mouth shape. Recover its drawings without inventing the missing one.
+  const oldProject=structuredClone(saved.project);oldProject.fps=6;oldProject.lines=oldProject.lines.slice(0,1);oldProject.slots=[];
+  const oldClip=compileClip(oldProject,saved.takes);oldProject.slots=oldClip.slots;
+  const oldTransfer={...makeTransfer(oldProject,oldClip),version:1,fps:6};
+  const upgraded=compileClip({...oldProject,fps:24},saved.takes,oldProject.slots);
+  assert.ok(upgraded.slots.length>oldClip.slots.length,'fixture must contain a newly sampled mouth');
+  const oldVideo=await page.evaluate(async count=>{const canvas=document.createElement('canvas');canvas.width=1080;canvas.height=1920;const ctx=canvas.getContext('2d');const {exportFrameVideo}=await import('/test-video.mjs');const blob=await exportFrameVideo({canvas,frameCount:count,drawFrame:async i=>{ctx.fillStyle=`rgb(${i*35},30,200)`;ctx.fillRect(0,0,1080,1920);}});return [...new Uint8Array(await blob.arrayBuffer())];},oldTransfer.slots.length);
+  await fs.writeFile('.work/genuine-legacy.zip',Buffer.from(await (await packProject({project:oldProject,takes:saved.takes,transfer:oldTransfer,art:{},video:new Blob([Buffer.from(oldVideo)],{type:'video/mp4'})})).arrayBuffer()));
+  await page.locator('#open-project').setInputFiles('.work/genuine-legacy.zip');await page.getByText('Project restored.',{exact:true}).waitFor({timeout:60000});
+  assert.equal(await page.locator('#art-count').textContent(),String(oldTransfer.slots.length));
+  assert.equal(await page.locator('#drawing-count').textContent(),String(upgraded.slots.length));
+  assert.match(await page.locator('#transfer-summary').textContent(),/new mouth drawings needed/);
+  assert.equal(await page.locator('#scrub').getAttribute('step'),String(1/24));assert.equal(await page.locator('#export').isDisabled(),true);
   assert.deepEqual(errors,[]);
  }finally{await browser.close();}
 });

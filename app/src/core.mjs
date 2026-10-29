@@ -4,7 +4,7 @@ export const POSES = ['stand', 'point', 'shrug', 'open-hand', 'hands-on-hips'];
 export const uid = () => globalThis.crypto.randomUUID();
 export function newProject() {
   const actor = (model, x, yaw) => ({ model, x, z: 0, yaw, scale: 1, pose: 'stand', headYaw: 0, headTilt: 0, armL: 0, armR: 0, handL: 0, handR: 0, nose: 0 });
-  return { version: 1, id: uid(), title: 'An ordinary conversation', fps: 12, rate: 1,
+  return { version: 1, id: uid(), title: 'An ordinary conversation', fps: 24, rate: 1,
     scene: { format: 'portrait', style: 'flat', background: '#ffffff', count: 2,
       camera: { projection: 'orthographic', azimuth: 0, elevation: 5, zoom: 1, targetX: 0, targetY: 1 },
       actors: [actor('blue', -.4, 18), actor('rust-beady', .4, -18)] },
@@ -16,7 +16,7 @@ function finite(n, min, max, name) { if (!Number.isFinite(n) || n < min || n > m
 export function validateProject(p) {
   if (!p || p.version !== 1) throw Error('Unsupported project version');
   if (typeof p.id !== 'string' || !/^[a-zA-Z0-9-]{1,80}$/.test(p.id) || typeof p.title !== 'string' || p.title.length > 200) throw Error('Invalid project title or ID');
-  if (![6,8,12].includes(p.fps)) throw Error('Choose 6, 8 or 12 fps');
+  if (![6,8,12,24].includes(p.fps)) throw Error('Invalid animation frame rate');
   finite(p.rate,.5,2,'speech rate');
   if(!['robot','silent','recording'].includes(p.audioMode))throw Error('Invalid audio mode');
   finite(p.audioOffset,-120,120,'audio offset');finite(p.audioTrimStart,0,120,'audio trim');finite(p.audioTrimEnd,0,120,'audio trim');
@@ -51,6 +51,15 @@ export function validateProject(p) {
     try{validateProject({...p,scene,slots:[],lines:[],overrides:[]});}catch{throw Error('Invalid drawing scene');}
   }
   return p;
+}
+export function withSpeechRate(project, rate) {
+  const next=structuredClone(project);next.rate=rate;next.overrides=[];
+  return validateProject(next);
+}
+export function upgradeTiming(project) {
+  validateProject(project);
+  const next=structuredClone(project);next.fps=24;
+  return next;
 }
 export function dimensions(p) { return p.scene.format === 'portrait' ? [1080,1920] : [1920,1080]; }
 export function phoneMouth(phone) {

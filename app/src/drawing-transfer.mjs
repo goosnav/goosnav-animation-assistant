@@ -1,19 +1,19 @@
 import { dimensions, uid } from './core.mjs';
 
-export const TRANSFER_FPS = 6;
+export const TRANSFER_FPS = 24;
 export const MAX_TRANSFER_FRAMES = 100;
 
 // Keep this manifest with the project: the MP4 is a drawing carrier, not a timeline.
 export function makeTransfer(project, clip) {
   const [width, height] = dimensions(project);
-  const transfer = { version: 1, id: uid(), fps: TRANSFER_FPS, width, height,
+  const transfer = { version: 2, id: uid(), fps: TRANSFER_FPS, width, height,
     slots: clip.slots.filter(s => s.active).map(({id, key}) => ({id, key})) };
   return validateTransfer(transfer);
 }
 
 export function validateTransfer(transfer) {
-  if (!transfer || transfer.version !== 1 || typeof transfer.id !== 'string' || !/^[a-z0-9-]{1,80}$/.test(transfer.id)
-    || transfer.fps !== TRANSFER_FPS || ![[1080,1920],[1920,1080]].some(([w,h]) => transfer.width === w && transfer.height === h)
+  if (!transfer || !((transfer.version === 1 && transfer.fps === 6) || (transfer.version === 2 && transfer.fps === TRANSFER_FPS)) || typeof transfer.id !== 'string' || !/^[a-z0-9-]{1,80}$/.test(transfer.id)
+    || ![[1080,1920],[1920,1080]].some(([w,h]) => transfer.width === w && transfer.height === h)
     || !Array.isArray(transfer.slots) || !transfer.slots.length || transfer.slots.length > MAX_TRANSFER_FRAMES) {
     throw Error('Invalid drawing video manifest. Export a new reference video (at most 100 drawings).');
   }
@@ -31,9 +31,13 @@ export function transferSlots(transfer, project, clip) {
   validateTransfer(transfer);
   const [w,h] = dimensions(project), registry = new Map(clip.slots.map(s => [s.id,s]));
   const saved = new Map(transfer.slots.map(s => [s.id,s.key]));
+  // Legacy 6fps sampling can miss a brief mouth shape. Recover all old drawings;
+  // leave genuinely new mouths unassigned rather than discarding existing work.
+  const visualPose = s => JSON.stringify([s?.state.scene,s?.state.blinks]);
+  const legacyPoses = new Set(transfer.version === 1 ? transfer.slots.map(s => visualPose(registry.get(s.id))) : []);
   if (w !== transfer.width || h !== transfer.height
     || transfer.slots.some(s => registry.get(s.id)?.key !== s.key)
-    || clip.slots.some(s => s.active && saved.get(s.id) !== s.key)) {
+    || clip.slots.some(s => s.active && saved.get(s.id) !== s.key && !legacyPoses.has(visualPose(s)))) {
     throw Error('The scene or required drawings changed. Restore the exported scene or export a new reference video. Timing-only changes can reuse your drawings.');
   }
   return transfer.slots.map(s => registry.get(s.id));
