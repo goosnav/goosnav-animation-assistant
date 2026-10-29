@@ -48,7 +48,6 @@ test('exact drawing video preserves all frames in order, independently of return
    for(const [name,blob,options]of [
     ['missing',source,{width:128,height:128,expectedCount:4}],
     ['extra',source,{width:128,height:128,expectedCount:2}],
-    ['dimensions',source,{width:1920,height:1080,expectedCount:3}],
     ['corrupt',new Blob(['not video']),{width:128,height:128,expectedCount:3}]
    ]){try{await extractDrawingFrames(blob,options);}catch(e){failures[name]=e.message;}}
    const controller=new AbortController();let progress=0;
@@ -61,7 +60,32 @@ test('exact drawing video preserves all frames in order, independently of return
   assert.equal(result.count,3);assert.equal(result.again,3);
   result.pixels.forEach((pixel,i)=>{assert.ok(pixel[i]>235);assert.ok(pixel[(i+1)%3]<20);});
   assert.match(result.failures.missing,/3 frames; expected 4/);assert.match(result.failures.extra,/3 frames; expected 2/);
-  assert.match(result.failures.dimensions,/128 × 128/);assert.ok(result.failures.corrupt);assert.equal(result.failures.cancel,'AbortError');assert.equal(result.progress,1);assert.ok(result.failures.unsupported);
+  assert.match(result.failures.corrupt,/Could not read this video/);assert.equal(result.failures.cancel,'AbortError');assert.equal(result.progress,1);assert.ok(result.failures.unsupported);
+ }finally{await browser.close();}
+});
+
+test('resized drawing videos fit the scene without losing frames, edges or proportions',async()=>{
+ const {browser,page}=await setup();
+ try{
+  const results=await page.evaluate(async()=>{
+   const {exportFrameVideo,extractDrawingFrames}=window.videoTools,results=[];
+   for(const [sw,sh,tw,th]of [[1088,1934,1080,1920],[270,480,1080,1920],[320,180,108,192]]){
+    const canvas=document.createElement('canvas');canvas.width=sw;canvas.height=sh;const ctx=canvas.getContext('2d');
+    const source=await exportFrameVideo({canvas,frameCount:2,drawFrame:async i=>{ctx.fillStyle=i?'#00ff00':'#ff0000';ctx.fillRect(0,0,sw,sh);ctx.fillStyle='#0000ff';ctx.fillRect(0,0,sw*.08,sh);ctx.fillRect(sw*.92,0,sw*.08,sh);}});
+    const adjustments=[];const frames=await extractDrawingFrames(source,{width:tw,height:th,expectedCount:2,background:'#ffcd00',onAdjustment:a=>adjustments.push(a)});
+    canvas.width=tw;canvas.height=th;const pixels=[];
+    for(const blob of frames){const image=await createImageBitmap(blob);ctx.drawImage(image,0,0);pixels.push({width:image.width,height:image.height,center:[...ctx.getImageData(tw/2,th/2,1,1).data],edge:[...ctx.getImageData(tw*.03,th/2,1,1).data],top:[...ctx.getImageData(tw/2,5,1,1).data]});image.close();}
+    results.push({pixels,adjustments});
+   }return results;
+  });
+  for(const [i,result]of results.entries()){
+   assert.equal(result.pixels.length,2);assert.equal(result.adjustments.length,1);
+   for(const [frame,pixel]of result.pixels.entries()){
+    assert.equal(pixel.width,i===2?108:1080);assert.equal(pixel.height,i===2?192:1920);
+    assert.ok(pixel.center[frame]>230);assert.ok(pixel.edge[2]>230,'left edge must remain visible');
+    if(i===2){assert.ok(pixel.top[0]>240);assert.ok(pixel.top[1]>190);assert.ok(pixel.top[2]<15,'letterboxing uses scene background');}
+   }
+  }
  }finally{await browser.close();}
 });
 
@@ -80,8 +104,8 @@ test('drawing video UI restores manifest, imports artwork atomically and rebuild
   const returned=await page.evaluate(async({bytes,count})=>{
    const {extractDrawingFrames,exportFrameVideo}=window.videoTools;
    const frames=await extractDrawingFrames(new Blob([new Uint8Array(bytes)]),{width:1080,height:1920,expectedCount:count});
-   const canvas=document.createElement('canvas');canvas.width=1080;canvas.height=1920;const ctx=canvas.getContext('2d');
-   const blob=await exportFrameVideo({canvas,frameCount:count,drawFrame:async i=>{const image=await createImageBitmap(frames[i]);ctx.drawImage(image,0,0);image.close();ctx.fillStyle=`rgb(${20+i*20},30,220)`;ctx.fillRect(0,0,100,100);}});
+   const canvas=document.createElement('canvas');canvas.width=1088;canvas.height=1934;const ctx=canvas.getContext('2d');
+   const blob=await exportFrameVideo({canvas,frameCount:count,drawFrame:async i=>{const image=await createImageBitmap(frames[i]);ctx.drawImage(image,0,0,canvas.width,canvas.height);image.close();ctx.fillStyle=`rgb(${20+i*20},30,220)`;ctx.fillRect(0,0,100,100);}});
    return [...new Uint8Array(await blob.arrayBuffer())];
   },{bytes:[...bytes],count});
   await fs.writeFile('.work/drawing-return.mp4',Buffer.from(returned));
@@ -90,7 +114,7 @@ test('drawing video UI restores manifest, imports artwork atomically and rebuild
   await page.reload();await page.getByText('Project restored.',{exact:false}).waitFor();
   await page.locator('[data-tab=draw]').click();assert.equal(await page.locator('input[type=file][accept*=video]').count(),1);assert.equal(await page.locator('#import-artwork').isEnabled(),true);
   await page.locator('#import-artwork').setInputFiles('.work/drawing-return.mp4');
-  await page.getByText(`${count} drawings imported.`,{exact:true}).waitFor({timeout:90000});
+  await page.getByText(`${count} drawings imported. Resized to fit.`,{exact:true}).waitFor({timeout:90000});
   assert.equal(await page.locator('#art-count').textContent(),String(count));assert.equal(await page.locator('#assigned-gallery img').count(),count);
   assert.equal(await page.locator('#returned-video').count(),0);assert.equal(await page.locator('#duration').textContent(),String(duration.toFixed(1)));
   // Failure must leave the successfully imported drawings and preview intact; same file can retry.

@@ -165,7 +165,8 @@ async function prepareDrawingVideo(signal){
 }
 async function importDrawingVideo(file,signal){
  requireClip();const transfer=state.transfer;transferSlots(transfer,p(),clip);
- const frames=await extractDrawingFrames(file,{width:transfer.width,height:transfer.height,expectedCount:transfer.slots.length,signal,onProgress:f=>{$('#progress').value=f;}});
+ let resized=false;
+ const frames=await extractDrawingFrames(file,{width:transfer.width,height:transfer.height,expectedCount:transfer.slots.length,background:p().scene.background,signal,onAdjustment:()=>{resized=true;},onProgress:f=>{$('#progress').value=f;}});
  const next=assignTransferFrames(transfer,p(),clip,frames,state.art),thumbs={...state.artThumbs};
  for(const [i,s]of transfer.slots.entries()){signal.throwIfAborted();thumbs[s.id]=await thumbnail(frames[i]);}
  signal.throwIfAborted();
@@ -173,7 +174,7 @@ async function importDrawingVideo(file,signal){
  p().audioMode='robot';$('#audio-mode').value='robot';
  imports.forEach(i=>URL.revokeObjectURL(i.url));imports=[];order=[];renderImports();
  cache?.clear();cache=null;invalidateVideo();$('#show-art').checked=true;renderAssigned();refreshStats();await renderPreview();
- status(`${frames.length} drawings imported.`);
+ status(`${frames.length} drawings imported.${resized?' Resized to fit.':''}`);
 }
 async function exportClip(signal){
  requireArt();const duration=clip.duration;

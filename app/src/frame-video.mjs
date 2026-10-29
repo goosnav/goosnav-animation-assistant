@@ -2,19 +2,25 @@ import { Input, BlobSource, MP4, QTFF, VideoSampleSink } from 'mediabunny';
 import { exportMP4 } from './video.mjs';
 import { TRANSFER_FPS, MAX_TRANSFER_FRAMES, checkFrameCount } from './drawing-transfer.mjs';
 
+class DrawingVideoError extends Error {}
+function requireFrameCount(actual,expected){
+  try { checkFrameCount(actual,expected); }
+  catch(error){ throw new DrawingVideoError(error.message,{cause:error}); }
+}
+
 function inputFor(blob) {
-  if (!(blob instanceof Blob) || !blob.size || blob.size > 150*1024*1024) throw Error('Choose a drawing video smaller than 150 MB.');
+  if (!(blob instanceof Blob) || !blob.size || blob.size > 150*1024*1024) throw new DrawingVideoError('Choose a drawing video smaller than 150 MB.');
   return new Input({source:new BlobSource(blob),formats:[MP4,QTFF]});
 }
 
-async function drawingTrack(input, expectedCount, width, height) {
+async function drawingTrack(input, expectedCount) {
   const track = await input.getPrimaryVideoTrack();
-  if (!track) throw Error('No video frames found. Export Animated MP4 from Procreate.');
+  if (!track) throw new DrawingVideoError('No drawings found in this video. Export Animated MP4 from Procreate and try again.');
   const w = await track.getDisplayWidth(), h = await track.getDisplayHeight();
-  if (w !== width || h !== height) throw Error(`Video is ${w} × ${h}; expected ${width} × ${height}. Export at Max Resolution in Procreate without resizing the canvas.`);
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w < 1 || h < 1 || w*h > 4096*4096) throw new DrawingVideoError('This video is too large to read on this device. Export it at a lower resolution and try again.');
   const {packetCount} = await track.computePacketStats(MAX_TRANSFER_FRAMES+1);
-  checkFrameCount(packetCount,expectedCount);
-  return track;
+  requireFrameCount(packetCount,expectedCount);
+  return {track,width:w,height:h};
 }
 
 export async function exportFrameVideo({canvas,frameCount,drawFrame,signal,onProgress}) {
@@ -22,13 +28,13 @@ export async function exportFrameVideo({canvas,frameCount,drawFrame,signal,onPro
   const blob = await exportMP4({canvas,frameCount,fps:TRANSFER_FPS,duration:frameCount/TRANSFER_FPS,
     exactFrames:true,signal,onProgress,draw:t=>drawFrame(Math.round(t*TRANSFER_FPS))});
   const input = inputFor(blob);
-  try { signal?.throwIfAborted();await drawingTrack(input,frameCount,canvas.width,canvas.height);return blob; }
+  try { signal?.throwIfAborted();const info=await drawingTrack(input,frameCount);if(info.width!==canvas.width||info.height!==canvas.height)throw Error('The reference video changed size during encoding. Try creating references again.');return blob; }
   finally { input.dispose(); }
 }
 
 // Decode actual samples, not time-based screenshots: the editor may change FPS.
 // Each decoded sample is released immediately; only compressed PNGs are retained.
-export async function extractDrawingFrames(blob,{width,height,expectedCount,signal,onProgress=()=>{}}) {
+export async function extractDrawingFrames(blob,{width,height,expectedCount,background='white',signal,onProgress=()=>{},onAdjustment=()=>{}}) {
   signal?.throwIfAborted();
   if (!Number.isInteger(expectedCount) || expectedCount < 1 || expectedCount > MAX_TRANSFER_FRAMES
     || !Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || width*height > 1920*1080) throw Error('Invalid drawing video dimensions or frame count.');
@@ -36,22 +42,33 @@ export async function extractDrawingFrames(blob,{width,height,expectedCount,sign
   signal?.addEventListener('abort',abort,{once:true});
   const canvas = document.createElement('canvas');
   try {
-    const track = await drawingTrack(input,expectedCount,width,height);
+    const {track,width:sourceWidth,height:sourceHeight} = await drawingTrack(input,expectedCount);
     signal?.throwIfAborted();
-    if (!(await track.canDecode())) throw Error('This browser cannot extract this video. Export Animated MP4 in Procreate and update iPadOS/Safari, or use image import.');
+    if (!(await track.canDecode())) throw new DrawingVideoError('This browser cannot read this video format. Export Animated MP4 from Procreate and try again, or upload the drawings as images.');
     canvas.width=width;canvas.height=height;
     const context=canvas.getContext('2d'),frames=[];let bytes=0;
+    // Editors may round dimensions or export a smaller size. Normalize here,
+    // preserving the whole drawing and its proportions, including rotation metadata.
+    const scale=Math.min(width/sourceWidth,height/sourceHeight),dw=sourceWidth*scale,dh=sourceHeight*scale;
+    const dx=(width-dw)/2,dy=(height-dh)/2;
+    context.imageSmoothingEnabled=true;context.imageSmoothingQuality='high';
     for await (const sample of new VideoSampleSink(track).samples()) {
       try {
         signal?.throwIfAborted();
-        if (frames.length >= expectedCount) checkFrameCount(frames.length+1,expectedCount);
-        context.fillStyle='white';context.fillRect(0,0,width,height);sample.draw(context,0,0,width,height);
+        if (frames.length >= expectedCount) requireFrameCount(frames.length+1,expectedCount);
+        context.fillStyle=background;context.fillRect(0,0,width,height);sample.draw(context,dx,dy,dw,dh);
         const png=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Could not extract this drawing.')),'image/png'));
-        bytes+=png.size;if(bytes>150*1024*1024)throw Error('Extracted drawings exceed 150 MB. Split this into shorter clips.');
+        bytes+=png.size;if(bytes>150*1024*1024)throw new DrawingVideoError('Extracted drawings exceed 150 MB. Split this into shorter clips.');
         frames.push(png);onProgress(frames.length/expectedCount);
       } finally { sample.close(); }
     }
-    signal?.throwIfAborted();checkFrameCount(frames.length,expectedCount);return frames;
-  } catch (error) { signal?.throwIfAborted();throw error; }
+    signal?.throwIfAborted();requireFrameCount(frames.length,expectedCount);
+    if(sourceWidth!==width||sourceHeight!==height)onAdjustment({sourceWidth,sourceHeight,width,height});
+    return frames;
+  } catch (error) {
+    signal?.throwIfAborted();
+    if(error instanceof DrawingVideoError)throw error;
+    throw new DrawingVideoError('Could not read this video. Your drawings are unchanged. Export Animated MP4 from Procreate and upload it again.',{cause:error});
+  }
   finally { signal?.removeEventListener('abort',abort);input.dispose();canvas.width=1;canvas.height=1; }
 }
