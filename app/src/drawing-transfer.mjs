@@ -33,7 +33,7 @@ export function transferSlots(transfer, project, clip) {
   const saved = new Map(transfer.slots.map(s => [s.id,s.key]));
   // Legacy 6fps sampling can miss a brief mouth shape. Recover all old drawings;
   // leave genuinely new mouths unassigned rather than discarding existing work.
-  const visualPose = s => JSON.stringify([s?.state.scene,s?.state.blinks]);
+  const visualPose = s => JSON.stringify([s?.state.scene,s?.state.blinks,s?.state.smears??null]);
   const legacyPoses = new Set(transfer.version === 1 ? transfer.slots.map(s => visualPose(registry.get(s.id))) : []);
   if (w !== transfer.width || h !== transfer.height
     || transfer.slots.some(s => registry.get(s.id)?.key !== s.key)

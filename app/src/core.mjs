@@ -37,6 +37,7 @@ export function validateProject(p) {
     finite(l.rate,.5,2,'line rate');finite(l.pause,0,10,'pause');
     if (l.pose!=='keep'&&!POSES.includes(l.pose)) throw Error('Invalid line pose');
     finite(l.headYaw??0,-75,75,'line head turn');
+    if(l.smear!==undefined&&typeof l.smear!=='boolean')throw Error('Invalid smear option');
   }
   if (!Array.isArray(p.overrides)||p.overrides.length>2000) throw Error('Invalid mouth edits');
   for(const o of p.overrides){finite(o.start,0,120,'mouth edit');finite(o.end,o.start,120,'mouth edit');if(![0,1].includes(o.actor)||!MOUTHS.includes(o.mouth))throw Error('Invalid mouth edit');}
@@ -46,6 +47,14 @@ export function validateProject(p) {
     if(!s||typeof s.id!=='string'||!/^d[a-z0-9-]{1,64}$/.test(s.id)||drawingIds.has(s.id)||s.key!==JSON.stringify(s.state))throw Error('Invalid drawing identity');
     drawingIds.add(s.id);
     if(!Array.isArray(s.state?.mouths)||s.state.mouths.length!==2||s.state.mouths.some(m=>!MOUTHS.includes(m))||!Array.isArray(s.state.blinks)||s.state.blinks.length!==2||s.state.blinks.some(b=>typeof b!=='boolean'))throw Error('Invalid drawing state');
+    if(s.state.smears!==undefined){
+      if(!Array.isArray(s.state.smears)||!s.state.smears.length||s.state.smears.length>2)throw Error('Invalid drawing smear');
+      const actors=new Set();
+      for(const smear of s.state.smears){
+        if(!smear||![0,1].includes(smear.actor)||smear.actor>=s.state.scene?.count||actors.has(smear.actor)||!POSES.includes(smear.pose)||Object.keys(smear).some(k=>!['actor','pose','headYaw'].includes(k)))throw Error('Invalid drawing smear');
+        finite(smear.headYaw,-75,75,'drawing smear');actors.add(smear.actor);
+      }
+    }
     const scene=structuredClone(s.state.scene);
     if(scene?.count===1&&scene.actors?.length===1)scene.actors.push(structuredClone(scene.actors[0]));
     try{validateProject({...p,scene,slots:[],lines:[],overrides:[]});}catch{throw Error('Invalid drawing scene');}
@@ -88,7 +97,7 @@ export function compileClip(project, takes, previous = []) {
     return {actor:l.actor,start:l.end+(l.pause-duration)/2,end:l.end+(l.pause+duration)/2};
   });
   const totalFrames=Math.ceil((cursor+.5)*project.fps), exposures=[];
-  for (let f=0; f<totalFrames; f++) {
+  function frameState(f){
     const t=(f+.5)/project.fps, line=lines.find(l=>t>=l.start&&t<l.end);
     const state={scene:structuredClone(project.scene),mouths:['rest','rest'],blinks:[false,false]};
     if (line) {
@@ -101,6 +110,33 @@ export function compileClip(project, takes, previous = []) {
     for(const o of project.overrides) if(t>=o.start&&t<o.end) state.mouths[o.actor]=o.mouth;
     // Inactive actor values do not inflate the drawing library for solo scenes.
     state.scene.actors=state.scene.actors.slice(0,state.scene.count);
+    return state;
+  }
+  const transitions=new Map();
+  for(const line of lines.filter(l=>l.smear))for(const edge of ['start','end']){
+    const boundary=Math.ceil(line[edge]*project.fps-.5);
+    if(boundary<1||boundary>=totalFrames)continue;
+    const from=frameState(boundary-1).scene.actors[line.actor],to=frameState(boundary).scene.actors[line.actor];
+    if(from.pose===to.pose&&from.headYaw===to.headYaw)continue;
+    const beforeTime=(boundary-.5)/project.fps;
+    const quiet=!lines.some(l=>beforeTime>=l.start&&beforeTime<l.end);
+    let frame=edge==='start'&&quiet?boundary-1:boundary;
+    // A very short pause can already contain the preceding outgoing smear.
+    if(frame!==boundary&&transitions.get(frame)?.has(line.actor))frame=boundary;
+    if(!transitions.has(frame))transitions.set(frame,new Map());
+    transitions.get(frame).set(line.actor,[from,to]);
+  }
+  for (let f=0; f<totalFrames; f++) {
+    const state=frameState(f);
+    if(transitions.has(f)){
+      state.smears=[];
+      for(const [actor,endpoints]of [...transitions.get(f)].sort(([a],[b])=>a-b)){
+        // Reverse moves share the same in-between when their mouths match.
+        endpoints.sort((a,b)=>{const x=JSON.stringify([a.pose,a.headYaw]),y=JSON.stringify([b.pose,b.headYaw]);return x<y?-1:x>y?1:0;});
+        const [a,b]=endpoints;state.scene.actors[actor].pose=a.pose;state.scene.actors[actor].headYaw=a.headYaw;
+        state.smears.push({actor,pose:b.pose,headYaw:b.headYaw});
+      }
+    }
     const key=JSON.stringify(state);let slot=byKey.get(key);
     if(!slot){slot={id:`d${uid()}`,key,state};byKey.set(key,slot);slots.push(slot);}
     slot.active=true;

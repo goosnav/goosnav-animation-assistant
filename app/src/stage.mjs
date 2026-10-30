@@ -12,7 +12,7 @@ async function load(name){if(!models.has(name))models.set(name,new GLTFLoader().
 function actor(source){
  const root=clone(source),bones={},rest={},mouths=[],blinks=[],materials=[];
  root.traverse(o=>{
-  if(o.isBone){const n=o.name.replaceAll('.','');bones[n]=o;rest[n]={q:o.quaternion.clone(),p:o.position.clone()};}
+  if(o.isBone){const n=o.name.replaceAll('.','');bones[n]=o;rest[n]={q:o.quaternion.clone(),p:o.position.clone(),s:o.scale.clone()};}
   if(o.isMesh){
    o.frustumCulled=false;
    o.material=(Array.isArray(o.material)?o.material:[o.material]).map(m=>{
@@ -30,8 +30,8 @@ function actor(source){
  const teeth=new THREE.Mesh(new THREE.BoxGeometry(.105,.017,.022),new THREE.MeshToonMaterial({color:0xffffff}));
  teeth.position.set(0,headPosition.y+.028,.151);root.add(teeth);root.updateMatrixWorld(true);head.attach(teeth);teeth.visible=false;
  function pose(name,x=0,y=0,z=0){if(bones[name])bones[name].quaternion.copy(rest[name].q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(x,y,z)));}
- return {root,apply(a,mouth='rest',blink=false,style='flat'){
-  for(const [n,b]of Object.entries(bones)){b.quaternion.copy(rest[n].q);b.position.copy(rest[n].p);}
+ return {root,apply(a,mouth='rest',blink=false,style='flat',smearFrom=null){
+  for(const [n,b]of Object.entries(bones)){b.quaternion.copy(rest[n].q);b.position.copy(rest[n].p);b.scale.copy(rest[n].s);}
   root.position.set(a.x,0,a.z);root.rotation.y=rad(a.yaw);root.scale.setScalar(a.scale);
   // The authored v10 rest already has lowered arms. Keep the library's local
   // joint convention; large opposite Z rotations fold shoulders into the torso.
@@ -51,6 +51,24 @@ function actor(source){
   for(const mesh of blinks)mesh.morphTargetInfluences[mesh.morphTargetDictionary.blink]=blink?1:0;
   teeth.visible=mouth==='teeth';
   for(const {mat,color}of materials)mat.color.copy(style==='line'&&!/mouth|eye_black|pupil/.test(mat.name)?new THREE.Color('white'):color);
+  if(smearFrom){
+   const target=Object.fromEntries(Object.entries(bones).map(([n,b])=>[n,{q:b.quaternion.clone(),p:b.position.clone()}]));
+   this.apply(smearFrom,mouth,blink,style);
+   for(const [n,b]of Object.entries(bones)){
+    const delta=b.quaternion.clone().invert().multiply(target[n].q),angle=b.quaternion.angleTo(target[n].q);
+    b.quaternion.slerp(target[n].q,.5);b.position.lerp(target[n].p,.5);
+    if(angle<.03)continue;
+    // Stretch across the moving limb's arc, leaving the torso and still limbs
+    // at rest. This is one exaggerated drawing, not a blurred video overlay.
+    if(/^(upper_arm|forearm)[LR]$/.test(n)){
+     b.scale.x*=1+Math.min(3,(Math.abs(delta.z)+Math.abs(delta.y)*.5)*5);
+     b.scale.z*=1+Math.min(3,(Math.abs(delta.x)+Math.abs(delta.y)*.5)*5);
+     b.scale.y*=1+Math.min(.12,angle*.08);
+    }else if(n==='head'){
+     const stretch=1+Math.min(.65,angle*.5);b.scale.x*=stretch;b.scale.z/=stretch;
+    }
+   }
+  }
  },dispose(){root.traverse(o=>{if(o.isMesh){for(const m of Array.isArray(o.material)?o.material:[o.material])m.dispose();}});teeth.geometry.dispose();}};
 }
 
@@ -76,7 +94,7 @@ export class Stage {
  }
  draw(state,width=540,height=960){
   this.state=state;this.renderer.setSize(width,height,false);this.scene.background=new THREE.Color(state.scene.background);
-  state.scene.actors.slice(0,state.scene.count).forEach((a,i)=>this.actors[i]?.apply(a,state.mouths?.[i],state.blinks?.[i],state.scene.style));
+  state.scene.actors.slice(0,state.scene.count).forEach((a,i)=>{const smear=state.smears?.find(s=>s.actor===i);this.actors[i]?.apply(a,state.mouths?.[i],state.blinks?.[i],state.scene.style,smear?{...a,pose:smear.pose,headYaw:smear.headYaw}:null);});
   const c=state.scene.camera,aspect=width/height;
   const next=c.projection==='perspective'?new THREE.PerspectiveCamera(35,aspect,.01,100):new THREE.OrthographicCamera(-1.35*aspect,1.35*aspect,1.35,-1.35,.01,100);
   next.zoom=c.projection==='orthographic'?c.zoom:1;

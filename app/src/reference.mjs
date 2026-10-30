@@ -1,10 +1,10 @@
 // Reference annotations describe reusable mouth drawings, not transcript letters.
 // Keep this module out of the finished-animation render path.
-export const REFERENCE_VERSION = 1;
+export const REFERENCE_VERSION = 2;
 const sounds={rest:'M/B/P',small:'E',open:'A',wide:'EE',round:'O/U',teeth:'F/V'};
 export function referenceLabels(state){
  return state.mouths.slice(0,state.scene.count).map((mouth,i)=>
-  `${state.scene.count===2?`${i?'B':'A'}: `:''}${sounds[mouth]}${state.blinks?.[i]?' · BLINK':''}`);
+  `${state.scene.count===2?`${i?'B':'A'}: `:''}${sounds[mouth]}${state.smears?.some(s=>s.actor===i)?' · SMEAR':''}${state.blinks?.[i]?' · BLINK':''}`);
 }
 export function drawReferenceLabels(ctx,state,width,height){
  const labels=referenceLabels(state),font=Math.round(Math.min(width,height)/30),padding=Math.round(font*.5),margin=Math.round(font*.7),lineHeight=Math.round(font*1.4);
