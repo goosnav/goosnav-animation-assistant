@@ -22,6 +22,8 @@ test('iPad-sized workflow generates unique references and restores a saved clip'
   const zipDownload=page.waitForEvent('download');await page.getByRole('button',{name:'PNG ZIP',exact:true}).click();
   const archive=unzipSync(await fs.readFile(await (await zipDownload).path()));
   const pngs=Object.entries(archive).filter(([name])=>name.endsWith('.png')).reverse();
+  const guideInk=await page.evaluate(async bytes=>{const image=await createImageBitmap(new Blob([new Uint8Array(bytes)]));const canvas=document.createElement('canvas');canvas.width=image.width;canvas.height=image.height;const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);image.close();const data=ctx.getImageData(canvas.width-500,0,500,220).data;let dark=0;for(let i=0;i<data.length;i+=4)if(data[i]<45&&data[i+1]<45&&data[i+2]<45)dark++;return dark;},[...pngs[0][1]]);
+  assert.ok(guideInk>300,'PNG reference export must contain its mouth label');
   await page.locator('#import-artwork').setInputFiles(pngs.map(([name,buffer])=>({name,mimeType:'image/png',buffer:Buffer.from(buffer)})));
   await page.locator('#import-gallery button').last().waitFor();
   for(let i=count-1;i>=0;i--)await page.locator('#import-gallery button').nth(i).click();

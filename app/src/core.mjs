@@ -81,6 +81,12 @@ export function compileClip(project, takes, previous = []) {
   }
   if (!lines.length) throw Error('Write at least one line of dialogue');
   if (cursor+.5>120) throw Error('This clip exceeds two minutes. Split it into shorter clips.');
+  // A pause blink has a closed mouth, so repeated accents reuse one drawing
+  // instead of needing a new blink variant for each spoken mouth shape.
+  const blinks=lines.filter(l=>l.blink&&l.pause>0).map(l=>{
+    const duration=Math.min(3/project.fps,l.pause);
+    return {actor:l.actor,start:l.end+(l.pause-duration)/2,end:l.end+(l.pause+duration)/2};
+  });
   const totalFrames=Math.ceil((cursor+.5)*project.fps), exposures=[];
   for (let f=0; f<totalFrames; f++) {
     const t=(f+.5)/project.fps, line=lines.find(l=>t>=l.start&&t<l.end);
@@ -90,8 +96,8 @@ export function compileClip(project, takes, previous = []) {
       state.mouths[line.actor]=phone?phoneMouth(phone.phone):'rest';
       const a=state.scene.actors[line.actor];if(line.pose!=='keep')a.pose=line.pose;
       a.headYaw=Math.max(-75,Math.min(75,a.headYaw+(line.headYaw??0)));
-      state.blinks[line.actor]=!!line.blink&&age<2/project.fps;
     }
+    for(const blink of blinks)if(t>=blink.start&&t<blink.end)state.blinks[blink.actor]=true;
     for(const o of project.overrides) if(t>=o.start&&t<o.end) state.mouths[o.actor]=o.mouth;
     // Inactive actor values do not inflate the drawing library for solo scenes.
     state.scene.actors=state.scene.actors.slice(0,state.scene.count);

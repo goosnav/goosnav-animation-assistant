@@ -9,6 +9,15 @@ import { makeTransfer } from '../app/src/drawing-transfer.mjs';
 
 const harness = (await build({stdin:{contents:`export * from './app/src/video.mjs'; export * from './app/src/frame-video.mjs';
 import { Input, BlobSource, MP4, VideoSampleSink } from 'mediabunny';
+export function badgeStats(canvas){
+ const ctx=canvas.getContext('2d'),pixels=ctx.getImageData(canvas.width-500,0,500,220).data;let dark=0,blue=0;
+ for(let i=0;i<pixels.length;i+=4){if(pixels[i]<45&&pixels[i+1]<45&&pixels[i+2]<45)dark++;if(pixels[i]<30&&pixels[i+1]>25&&pixels[i+1]<90&&pixels[i+2]>100&&pixels[i+2]<200)blue++;}
+ return {dark,blue};
+}
+export async function videoBadge(blob){
+ const input=new Input({source:new BlobSource(blob),formats:[MP4]}),canvas=document.createElement('canvas');canvas.width=1080;canvas.height=1920;
+ try{const sample=await new VideoSampleSink(await input.getPrimaryVideoTrack()).getSample(0);try{sample.draw(canvas.getContext('2d'),0,0,1080,1920);return badgeStats(canvas);}finally{sample.close();}}finally{input.dispose();}
+}
 export async function inspectMovie(blob){
  const input=new Input({source:new BlobSource(blob),formats:[MP4]});
  try{const video=await input.getPrimaryVideoTrack(),audio=await input.getPrimaryAudioTrack(),stats=await video.computePacketStats();let peak=0;
@@ -101,13 +110,17 @@ test('drawing video UI restores manifest, imports artwork atomically and rebuild
   const downloaded=page.waitForEvent('download');await page.locator('#download-drawing-video').click();const file=await downloaded;await file.saveAs('.work/drawing-reference.mp4');
   // A real encoder produces an edited return video. Distinct color marks stand in for pencil drawings.
   const bytes=await fs.readFile('.work/drawing-reference.mp4');
-  const returned=await page.evaluate(async({bytes,count})=>{
-   const {extractDrawingFrames,exportFrameVideo}=window.videoTools;
+  const edited=await page.evaluate(async({bytes,count})=>{
+   const {extractDrawingFrames,exportFrameVideo,badgeStats}=window.videoTools;
    const frames=await extractDrawingFrames(new Blob([new Uint8Array(bytes)]),{width:1080,height:1920,expectedCount:count});
    const canvas=document.createElement('canvas');canvas.width=1088;canvas.height=1934;const ctx=canvas.getContext('2d');
-   const blob=await exportFrameVideo({canvas,frameCount:count,drawFrame:async i=>{const image=await createImageBitmap(frames[i]);ctx.drawImage(image,0,0,canvas.width,canvas.height);image.close();ctx.fillStyle=`rgb(${20+i*20},30,220)`;ctx.fillRect(0,0,100,100);}});
-   return [...new Uint8Array(await blob.arrayBuffer())];
+   const badges=[];
+   const blob=await exportFrameVideo({canvas,frameCount:count,drawFrame:async i=>{const image=await createImageBitmap(frames[i]);ctx.drawImage(image,0,0,canvas.width,canvas.height);image.close();badges.push(badgeStats(canvas));ctx.fillStyle='white';ctx.fillRect(canvas.width-510,0,510,250);ctx.fillStyle=`rgb(${20+(i%4)*60},${30+Math.floor(i/4)*70},220)`;ctx.fillRect(0,0,100,100);}});
+   return {bytes:[...new Uint8Array(await blob.arrayBuffer())],referencePNG:[...new Uint8Array(await frames[0].arrayBuffer())],badges};
   },{bytes:[...bytes],count});
+  await fs.writeFile('.work/reference-labeled.png',Buffer.from(edited.referencePNG));
+  assert.ok(edited.badges.every(b=>b.dark>300&&b.blue>100),'every MP4 reference has a visible corner label');
+  const returned=edited.bytes;
   await fs.writeFile('.work/drawing-return.mp4',Buffer.from(returned));
   // Save a portable backup, then reload so transfer identity cannot rely on transient JS state.
   await page.locator('.project-tools summary').click();const backupWait=page.waitForEvent('download');await page.locator('#save-project').click();await (await backupWait).saveAs('.work/transfer-backup.zip');
@@ -124,14 +137,16 @@ test('drawing video UI restores manifest, imports artwork atomically and rebuild
   assert.ok(await page.locator('#final-video').evaluate(v=>v.duration)>count/24+1);
   const movieInfo=await page.evaluate(async()=>{const {inspectMovie}=await import('/test-video.mjs');return inspectMovie(await (await fetch(document.querySelector('#final-video').src)).blob());});
   assert.ok(Math.abs(movieInfo.fps-24)<.01);assert.equal(movieInfo.audio,'aac');assert.ok(movieInfo.peak>.05,'default export must contain audible robot speech');
+  const finalBadge=await page.evaluate(async()=>{const {videoBadge}=await import('/test-video.mjs');return videoBadge(await (await fetch(document.querySelector('#final-video').src)).blob());});
+  assert.equal(finalBadge.dark,0,'final animation must not add reference labels');assert.equal(finalBadge.blue,0);
   const saved=await unpackProject(new Blob([await fs.readFile('.work/transfer-backup.zip')]));
   const planned=compileClip(saved.project,saved.takes,saved.project.slots);
   const times=[0,.4,.7,1,2,3,5];
   const actualPixels=await page.evaluate(async times=>{const {samplePixels}=await import('/test-video.mjs');return samplePixels(await (await fetch(document.querySelector('#final-video').src)).blob(),times);},times);
   for(const [i,time]of times.entries()){
    const referenceIndex=saved.transfer.slots.findIndex(s=>s.id===slotAt(planned,time).id);
-   const expected=[20+referenceIndex*20,30,220];
-   for(let channel=0;channel<3;channel++)assert.ok(Math.abs(actualPixels[i][channel]-expected[channel])<15,`Wrong drawing at ${time}s: ${actualPixels[i]} vs ${expected}`);
+   const expected=[20+(referenceIndex%4)*60,30+Math.floor(referenceIndex/4)*70,220];
+   for(let channel=0;channel<3;channel++)assert.ok(Math.abs(actualPixels[i][channel]-expected[channel])<24,`Wrong drawing at ${time}s: ${actualPixels[i]} vs ${expected}`);
   }
   // Speech speed must regenerate audio and phonemes without asking for a second Generate click.
   await page.locator('#rate').fill('1.5');await page.locator('#rate').dispatchEvent('change');await page.getByText('Speech ready.',{exact:true}).waitFor({timeout:60000});
@@ -145,11 +160,18 @@ test('drawing video UI restores manifest, imports artwork atomically and rebuild
   await page.locator('.project-tools summary').click();await page.locator('#open-project').setInputFiles('.work/transfer-backup.zip');await page.getByText('Project restored.',{exact:false}).waitFor();
   assert.equal(await page.locator('#import-artwork').isEnabled(),true);
   // A saved project from the removed importer must recover artwork, never passthrough.
-  const legacy={...saved,project:{...saved.project,fps:6,audioMode:'silent'},transfer:{...saved.transfer,version:1,fps:6},video:new Blob([Buffer.from(returned)],{type:'video/mp4'}),art:{}};
+  const unlabeled=await page.evaluate(async()=>{const c=document.createElement('canvas');c.width=1080;c.height=1920;const ctx=c.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,c.width,c.height);return [...new Uint8Array(await (await new Promise(r=>c.toBlob(r))).arrayBuffer())];});
+  const legacy={...saved,refs:Object.fromEntries(Object.keys(saved.refs).map(id=>[id,new Blob([Buffer.from(unlabeled)],{type:'image/png'})])),thumbs:{},refsVersion:0,project:{...saved.project,fps:6,audioMode:'silent'},transfer:{...saved.transfer,version:1,fps:6},video:new Blob([Buffer.from(returned)],{type:'video/mp4'}),art:{}};
   await fs.writeFile('.work/legacy-video.zip',Buffer.from(await (await packProject(legacy)).arrayBuffer()));
   await page.locator('#open-project').setInputFiles('.work/legacy-video.zip');await page.getByText('Project restored.',{exact:true}).waitFor({timeout:60000});
   assert.equal(await page.locator('#art-count').textContent(),String(count));assert.equal(await page.locator('#audio-mode').inputValue(),'robot');
   assert.equal(await page.locator('#duration').textContent(),duration.toFixed(1));
+  // Older cached references must regenerate labels without replacing imported art.
+  await page.locator('#drawing-video').click();await page.getByText('References ready.',{exact:true}).waitFor({timeout:90000});
+  assert.equal(await page.locator('#art-count').textContent(),String(count));
+  const labeledDownload=page.waitForEvent('download');await page.locator('#download-drawing-video').click();await (await labeledDownload).saveAs('.work/labeled-restored.mp4');
+  const restoredInk=await page.evaluate(async bytes=>{const {videoBadge}=await import('/test-video.mjs');return videoBadge(new Blob([new Uint8Array(bytes)]));},[...await fs.readFile('.work/labeled-restored.mp4')]);
+  assert.ok(restoredInk.dark>300&&restoredInk.blue>100);
   await page.setViewportSize({width:390,height:844});await page.locator('[data-tab=draw]').click();await page.evaluate(()=>scrollTo(0,0));
   const uploadBox=await page.locator('label:has(#import-artwork)').boundingBox();assert.ok(uploadBox.y+uploadBox.height<844,'Upload should be visible without scrolling on a phone');
   await page.locator('#assigned-gallery button').nth(2).click();await page.waitForFunction(()=>document.querySelectorAll('#assigned-gallery button')[2]?.getAttribute('aria-pressed')==='true');assert.equal(await page.locator('#assigned-gallery button').nth(2).getAttribute('aria-pressed'),'true');
