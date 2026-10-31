@@ -46,5 +46,35 @@
     "sha256": "82aa4fcb0f7c8e79d3fb4142ffa43d2c1bdf44b54c1ee4c27f6c1816cc4370e0",
     "source": "submodules/3D-comic-engine/assets/actor-gooby.glb",
     "sourceCommit": "7d9a08dd32072d28c28654f54ff88c52f75f8d21"
+  },
+  {
+    "file": "actor-v12.glb",
+    "sha256": "1b05e090a00cf019acc0249e5e03cea9d9d22e16f7f3b528c1dbdd4116f3ac9d",
+    "source": "submodules/goosnav-3D-assets/exports/app-actors/actor-v12.glb",
+    "sourceCommit": "beaa91a01f4aff1513ff0b33d95554801e08dd80"
+  },
+  {
+    "file": "actor-v12-beady.glb",
+    "sha256": "2f654bc991544984c0aa0e4be0dcd0fbd8e2f5389a2d24c543dac4883055fbee",
+    "source": "submodules/goosnav-3D-assets/exports/app-actors/actor-v12-beady.glb",
+    "sourceCommit": "beaa91a01f4aff1513ff0b33d95554801e08dd80"
+  },
+  {
+    "file": "actor-v12-fat.glb",
+    "sha256": "bf2a300cef571d548bb42c5c93beceeb90f8271fe7dcf8932dc265f87b54a11c",
+    "source": "submodules/goosnav-3D-assets/exports/app-actors/actor-v12-fat.glb",
+    "sourceCommit": "beaa91a01f4aff1513ff0b33d95554801e08dd80"
+  },
+  {
+    "file": "actor-v12-fat-glasses.glb",
+    "sha256": "18be7007ea1ba554cb2a0992973024efdbc4269d5d733ab51baac6782c6430a1",
+    "source": "submodules/goosnav-3D-assets/exports/app-actors/actor-v12-fat-glasses.glb",
+    "sourceCommit": "beaa91a01f4aff1513ff0b33d95554801e08dd80"
+  },
+  {
+    "file": "actor-billy-v2.glb",
+    "sha256": "c136e19f2c6d38caca91ed2b8a7090377fb3b5e37f2afca0167718b68fdc3e0c",
+    "source": "submodules/goosnav-3D-assets/exports/app-actors/actor-billy-v2.glb",
+    "sourceCommit": "beaa91a01f4aff1513ff0b33d95554801e08dd80"
   }
 ]
