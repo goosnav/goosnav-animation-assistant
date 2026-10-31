@@ -1,4 +1,4 @@
-import { newProject, validateProject, withSpeechRate, upgradeTiming, compileClip, slotAt, dimensions, toggleSelection, MODELS, MODEL_LABELS, MOUTHS, POSES, uid } from './core.mjs';
+import { newProject, withFraming, BACKDROPS, validateProject, withSpeechRate, upgradeTiming, compileClip, slotAt, dimensions, toggleSelection, MODELS, MODEL_LABELS, MOUTHS, POSES, uid } from './core.mjs';
 import { Stage } from './stage.mjs';
 import { generateSpeech, mixSpeech } from './speech/client.mjs';
 import { saveState, loadState, listSaved, loadSaved, localApp, quitLocal } from './storage.mjs';
@@ -7,7 +7,7 @@ import { download, shareFiles, imageZip, normalizeImage, ImageCache, layeredPSD,
 import { exportMP4, probeMP4, microphone, fitVoice } from './video.mjs';
 import { makeTransfer, validateTransfer, transferSlots, assignTransferFrames } from './drawing-transfer.mjs';
 import { exportFrameVideo, extractDrawingFrames } from './frame-video.mjs';
-import { REFERENCE_VERSION, annotatedReference } from './reference.mjs';
+import { REFERENCE_VERSION, referenceGuideKey, annotatedReference } from './reference.mjs';
 
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const tabs=['stage','rehearse','draw','finish'];
@@ -69,7 +69,7 @@ async function renderPreview(){
   c.hidden=false;$('#stage-canvas').hidden=true;$('#preview-badge').textContent='YOUR DRAWING';
  }else{
   $('#art-canvas').hidden=true;$('#stage-canvas').hidden=false;$('#preview-badge').textContent=useArt?'MISSING DRAWING':'3D GUIDE';
-  if(stage){await stage.prepare(p().scene);if(ticket!==renderTicket)return;stage.draw(activeState(),width,height);stage.controls.enabled=tab==='stage'&&!busy&&!playing;}
+  if(stage){await stage.prepare(p().scene);if(ticket!==renderTicket)return;stage.draw(activeState(),width,height,{guides:p().guides});stage.controls.enabled=tab==='stage'&&!busy&&!playing;}
  }
  updateClock();
 }
@@ -89,6 +89,8 @@ function slider(label,key,value,min,max,step=1,attrs=''){
 }
 function populate(){
  $('#title').value=p().title;$('#format').value=p().scene.format;$('#style').value=p().scene.style;$('#background').value=p().scene.background;$('#cast-count').value=p().scene.count;$('#projection').value=p().scene.camera.projection;$('#rate').value=p().rate;$('#rate-label').textContent=p().rate.toFixed(2)+'×';
+ $('#backdrop').innerHTML=Object.entries(BACKDROPS).map(([id,b])=>option(id,b.label,p().scene.backdrop||'none')).join('');
+ for(const key of ['ground','backdrop'])$('#'+key+'-grid').checked=!!p().guides?.[key];
  $('#camera-fields').innerHTML=[['Orbit','azimuth',-180,180],['Elevation','elevation',-45,75],['Zoom','zoom',.4,3,.05],['Pan sideways','targetX',-3,3,.05],['Pan up/down','targetY',0,3,.05]].map(([l,k,min,max,step])=>slider(l,k,p().scene.camera[k],min,max,step||1,'data-camera')).join('');
  $('#actor-fields').innerHTML=p().scene.actors.slice(0,p().scene.count).map((a,i)=>`<div class="actor"><h3>Character ${i?'B':'A'}</h3><div class="field-pair"><label>Character<select data-actor="${i}" data-key="model">${MODELS.map(m=>option(m,MODEL_LABELS[m]||pretty(m),a.model)).join('')}</select></label><label>Held pose<select data-actor="${i}" data-key="pose">${POSES.map(m=>option(m,pretty(m),a.pose)).join('')}</select></label></div><div class="sliders">${[['Position','x',-3,3,.05],['Depth','z',-2,2,.05],['Turn','yaw',-180,180,1],['Size','scale',.5,1.5,.05]].map(([l,k,min,max,step])=>slider(l,k,a[k],min,max,step,`data-actor="${i}"`)).join('')}</div><details><summary>Head, arms, and hands</summary><div class="sliders">${[['Head turn','headYaw',-75,75],['Head tilt','headTilt',-35,35],['Left arm','armL',-90,90],['Right arm','armR',-90,90],['Left hand','handL',-90,90],['Right hand','handR',-90,90]].map(([l,k,min,max])=>slider(l,k,a[k],min,max,1,`data-actor="${i}"`)).join('')}</div></details></div>`).join('');
  renderLines();$('#override-mouth').innerHTML=MOUTHS.map(m=>option(m,mouthNames[m],'rest')).join('');
@@ -142,9 +144,10 @@ async function play({silent=false,fromStart=false,onEnd}={}){
 }
 async function prepareDrawings(signal){
  requireClip();const [w,h]=dimensions(p()),canvas=document.createElement('canvas'),renderer=new Stage(canvas);
- const fresh=state.refsVersion===REFERENCE_VERSION?{...state.refs}:{},thumbs=state.refsVersion===REFERENCE_VERSION?{...state.thumbs}:{};
- try{await renderer.prepare(p().scene);for(const [i,s]of slots().entries()){signal.throwIfAborted();if(!fresh[s.id]){renderer.draw(s.state,w,h);fresh[s.id]=await annotatedReference(await renderer.png(),s.state,w,h);thumbs[s.id]=await thumbnail(fresh[s.id]);}$('#progress').value=(i+1)/slots().length;await new Promise(r=>setTimeout(r,0));}}finally{renderer.dispose();canvas.width=1;canvas.height=1;}
- signal.throwIfAborted();state.refs=fresh;state.thumbs=thumbs;state.refsVersion=REFERENCE_VERSION;referenceFiles=slots().map((s,i)=>new File([fresh[s.id]],`${String(i+1).padStart(2,'0')}-${s.id}.png`,{type:'image/png'}));
+ const guideKey=referenceGuideKey(p()),reuse=state.refsVersion===REFERENCE_VERSION&&state.refsGuides===guideKey;
+ const fresh=reuse?{...state.refs}:{},thumbs=reuse?{...state.thumbs}:{};
+ try{await renderer.prepare(p().scene);for(const [i,s]of slots().entries()){signal.throwIfAborted();if(!fresh[s.id]){renderer.draw(s.state,w,h,{guides:p().guides});fresh[s.id]=await annotatedReference(await renderer.png(),s.state,w,h);thumbs[s.id]=await thumbnail(fresh[s.id]);}$('#progress').value=(i+1)/slots().length;await new Promise(r=>setTimeout(r,0));}}finally{renderer.dispose();canvas.width=1;canvas.height=1;}
+ signal.throwIfAborted();state.refs=fresh;state.thumbs=thumbs;state.refsVersion=REFERENCE_VERSION;state.refsGuides=guideKey;referenceFiles=slots().map((s,i)=>new File([fresh[s.id]],`${String(i+1).padStart(2,'0')}-${s.id}.png`,{type:'image/png'}));
  renderReferences();
 
 }
@@ -229,12 +232,18 @@ $('#quit-local').hidden=!(await localApp());
 $('#cancel').onclick=()=>busy?.abort();
 $('#title').onchange=e=>{p().title=e.target.value;remember();save();};
 for(const [id,key]of [['format','format'],['style','style'],['background','background']])$('#'+id).onchange=e=>{p().scene[key]=e.target.value;changed();};
+$('#backdrop').onchange=e=>{const name=e.target.value;if(name==='none')delete p().scene.backdrop;else p().scene.backdrop=name;p().scene.background=BACKDROPS[name].sky;$('#background').value=p().scene.background;changed();};
+for(const key of ['ground','backdrop'])$('#'+key+'-grid').onchange=e=>{
+ p().guides={...p().guides,[key]:e.target.checked};remember();clearDrawingVideo();referenceFiles=[];
+ state.refs={};state.thumbs={};renderReferences();save();renderPreview().catch(e=>status(e.message,true));
+};
 $('#projection').onchange=e=>{p().scene.camera.projection=e.target.value;changed();};
-$('#cast-count').onchange=e=>{p().scene.count=Number(e.target.value);p().lines.forEach(l=>l.actor=Math.min(l.actor,p().scene.count-1));renderLines();populate();changed({speech:true});};
+$('#cast-count').onchange=e=>frame(e.target.value==='1'?'solo':'duet');
 $('#camera-fields').onchange=e=>{if(e.target.dataset.key){p().scene.camera[e.target.dataset.key]=Number(e.target.value);e.target.previousElementSibling.textContent=e.target.value;changed();}};
 $('#actor-fields').onchange=e=>{const el=e.target;if(el.dataset.actor!==undefined){p().scene.actors[Number(el.dataset.actor)][el.dataset.key]=el.tagName==='SELECT'?el.value:Number(el.value);if(el.previousElementSibling?.tagName==='OUTPUT')el.previousElementSibling.textContent=el.value;changed();}};
-$$('[data-framing]').forEach(b=>b.onclick=()=>{const kind=b.dataset.framing;p().scene.camera={projection:'orthographic',azimuth:0,elevation:5,zoom:kind==='close'?1.75:kind==='wide'?.75:1,targetX:kind==='close'?p().scene.actors[0].x:0,targetY:kind==='close'?1.45:1};if(kind==='solo'){p().scene.count=1;p().scene.actors[0].x=0;p().lines.forEach(l=>l.actor=0);state.takes={};}populate();changed();});
-$('#reset-camera').onclick=()=>{$('[data-framing="duet"]').click();};
+function frame(kind){const next=withFraming(p(),kind),speech=next.lines.some((l,i)=>l.actor!==p().lines[i].actor);state.project=next;changed({speech});populate();}
+$$('[data-framing]').forEach(b=>b.onclick=()=>frame(b.dataset.framing));
+$('#reset-camera').onclick=()=>frame('reset');
 $('#rate').oninput=e=>{$('#rate-label').textContent=Number(e.target.value).toFixed(2)+'×';};
 $('#rate').onchange=e=>{const candidate=withSpeechRate(p(),Number(e.target.value));run('Updating speech…',signal=>generatePerformance(signal,candidate)).finally(()=>{$('#rate').value=p().rate;$('#rate-label').textContent=p().rate.toFixed(2)+'×';});};
 $('#lines').onchange=e=>{const el=e.target,index=Number(el.closest('[data-line]')?.dataset.line),key=el.dataset.lineKey;if(!key)return;p().lines[index][key]=el.type==='checkbox'?el.checked:['actor','rate','pause','headYaw'].includes(key)?Number(el.value):el.value;changed({speech:['text','rate','actor'].includes(key)});};

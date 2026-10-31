@@ -130,6 +130,9 @@ test('drawing video UI restores manifest, imports artwork atomically and rebuild
   await page.getByText(`${count} drawings imported. Resized to fit.`,{exact:true}).waitFor({timeout:90000});
   assert.equal(await page.locator('#art-count').textContent(),String(count));assert.equal(await page.locator('#assigned-gallery img').count(),count);
   assert.equal(await page.locator('#returned-video').count(),0);assert.equal(await page.locator('#duration').textContent(),String(duration.toFixed(1)));
+  // Reference-only grids must not change assigned drawings or appear in the final movie.
+  await page.locator('[data-tab=stage]').click();await page.locator('#ground-grid').check();await page.locator('#backdrop-grid').check();
+  assert.equal(await page.locator('#art-count').textContent(),String(count));await page.locator('[data-tab=draw]').click();
   // Failure must leave the successfully imported drawings and preview intact; same file can retry.
   await page.locator('#import-artwork').setInputFiles({name:'bad.mp4',mimeType:'video/mp4',buffer:Buffer.from('broken')});
   await page.locator('#status.error').waitFor();assert.equal(await page.locator('#art-count').textContent(),String(count));assert.equal(await page.locator('#import-artwork').inputValue(),'');

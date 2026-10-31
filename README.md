@@ -17,6 +17,14 @@ These five talk like their 3D-asset versions. Each of the six mouth references i
 lip shapes and tongue, and the head tips back a little as the mouth opens. Their actors are rebuilt with
 `scripts/export_v12_app_actors.py` in that repository.
 
+## Staging and drawing guides
+
+New two-character scenes face inward at **40° / −40°**. **Two shot** restores that staging after Solo; **Reset** changes only the camera. Saved scenes keep their existing turns.
+
+The **Backdrop** selector offers Plain, Black pyramids, Red mesas, Colonnade, and Threshold. These are small, static 3D sketches based on the active Goosnav asset library, built locally from simple geometry. They follow the camera and require no extra downloads. The color picker adjusts the sky. Backdrops stay still across mouth drawings, so you can trace the background once and reuse it.
+
+**Reference grids → Ground / Backdrop** adds half-unit grid lines to the 3D preview and reference exports. They meet at the floor and follow the selected camera: parallel in Orthographic, converging in Perspective. Switching grids preserves your drawing assignments and speech. Hide the reference layers, including grids and sound labels, in Procreate; the final exporter adds neither. Changing the actual backdrop changes the scene and requires fresh drawings.
+
 ## Start locally
 
 For development, install Node.js 22.12 or newer, then:

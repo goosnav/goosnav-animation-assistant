@@ -5,16 +5,35 @@ export const MODELS = ['blue', 'blue-beady', 'rust', 'rust-beady', 'olive', 'oli
 export const MODEL_LABELS = { 'v12': 'Guy v12', 'v12-beady': 'Guy v12 (beady)', 'v12-fat': 'Fat guy (v12)',
   'v12-fat-glasses': 'Fat guy with glasses (v12)', 'billy-v2': 'Little Billy v2' };
 export const POSES = ['stand', 'point', 'shrug', 'open-hand', 'hands-on-hips'];
+export const BACKDROPS = {
+  none: {label:'Plain',sky:'#ffffff'},
+  'black-pyramids': {label:'Black pyramids',sky:'#e8b897'},
+  'red-mesas': {label:'Red mesas',sky:'#c8dce2'},
+  colonnade: {label:'Colonnade',sky:'#e9e4d7'},
+  threshold: {label:'Threshold',sky:'#c8d1d5'},
+};
 export const uid = () => globalThis.crypto.randomUUID();
 export function newProject() {
   const actor = (model, x, yaw) => ({ model, x, z: 0, yaw, scale: 1, pose: 'stand', headYaw: 0, headTilt: 0, armL: 0, armR: 0, handL: 0, handR: 0, nose: 0 });
   return { version: 1, id: uid(), title: 'An ordinary conversation', fps: 24, rate: 1,
     scene: { format: 'portrait', style: 'flat', background: '#ffffff', count: 2,
       camera: { projection: 'orthographic', azimuth: 0, elevation: 5, zoom: 1, targetX: 0, targetY: 1 },
-      actors: [actor('blue', -.4, 18), actor('rust-beady', .4, -18)] },
+      actors: [actor('blue', -.4, 40), actor('rust-beady', .4, -40)] },
     lines: [{ id: uid(), actor: 0, text: 'I have a perfectly reasonable question.', rate: 1, pause: .35, pose: 'keep', headYaw: 0, blink: false },
       { id: uid(), actor: 1, text: 'That has never stopped you before.', rate: 1, pause: .5, pose: 'keep', headYaw: 0, blink: false }],
     overrides: [], slots: [], audioOffset: 0, audioTrimStart: 0, audioTrimEnd: 0, audioMode: 'robot' };
+}
+// Presets stage actors deliberately; Reset changes only the camera.
+export function withFraming(project, kind) {
+  if(!['solo','duet','close','wide','reset'].includes(kind))throw Error('Invalid framing');
+  const p=structuredClone(project);
+  p.scene.camera={projection:'orthographic',azimuth:0,elevation:5,zoom:kind==='close'?1.75:kind==='wide'?.75:1,targetX:kind==='close'?p.scene.actors[0].x:0,targetY:kind==='close'?1.45:1};
+  if(kind==='solo'){
+    p.scene.count=1;Object.assign(p.scene.actors[0],{x:0,z:0,yaw:0});p.lines.forEach(l=>l.actor=0);
+  }else if(kind==='duet'){
+    p.scene.count=2;p.scene.actors.forEach((a,i)=>Object.assign(a,{x:i?.4:-.4,z:0,yaw:i?-40:40}));
+  }
+  return validateProject(p);
 }
 function finite(n, min, max, name) { if (!Number.isFinite(n) || n < min || n > max) throw Error(`Invalid ${name}`); }
 export function validateProject(p) {
@@ -26,6 +45,8 @@ export function validateProject(p) {
   finite(p.audioOffset,-120,120,'audio offset');finite(p.audioTrimStart,0,120,'audio trim');finite(p.audioTrimEnd,0,120,'audio trim');
   if (!['portrait','landscape'].includes(p.scene?.format) || !['flat','line'].includes(p.scene?.style)) throw Error('Invalid scene format or style');
   if (!/^#[0-9a-f]{6}$/i.test(p.scene.background)) throw Error('Invalid background');
+  if (p.scene.backdrop!==undefined&&(typeof p.scene.backdrop!=='string'||!Object.hasOwn(BACKDROPS,p.scene.backdrop)))throw Error('Invalid backdrop');
+  if (p.guides!==undefined&&(!p.guides||Array.isArray(p.guides)||typeof p.guides!=='object'||Object.entries(p.guides).some(([k,v])=>!['ground','backdrop'].includes(k)||typeof v!=='boolean')))throw Error('Invalid reference guides');
   if (![1,2].includes(p.scene.count) || !Array.isArray(p.scene.actors) || p.scene.actors.length!==2) throw Error('Invalid characters');
   if (!['orthographic','perspective'].includes(p.scene.camera?.projection)) throw Error('Invalid camera');
   for(const [k,min,max] of [['azimuth',-180,180],['elevation',-45,75],['zoom',.4,3],['targetX',-3,3],['targetY',0,3]]) finite(p.scene.camera[k],min,max,`camera ${k}`);

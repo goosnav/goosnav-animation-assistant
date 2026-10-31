@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { OutlineEffect } from 'three/addons/effects/OutlineEffect.js';
+import { Scenery } from './scenery.mjs';
 
 const rad=THREE.MathUtils.degToRad;
 const mouthWeights={rest:[0,0,0],small:[.22,0,0],open:[1,0,0],wide:[.2,0,.8],round:[.12,.88,0],teeth:[.16,0,.52]};
@@ -23,7 +24,7 @@ function actor(source,name=''){
   if(o.isMesh){
    o.frustumCulled=false;
    o.material=(Array.isArray(o.material)?o.material:[o.material]).map(m=>{
-    const mat=new THREE.MeshToonMaterial({color:m.color,map:m.map,side:m.side,transparent:m.transparent,opacity:m.opacity});
+    const mat=new THREE.MeshToonMaterial({color:m.color,map:m.map,side:m.side,transparent:m.transparent,opacity:m.opacity,fog:false});
     mat.name=m.name;mat.userData.outlineParameters={thickness:.0025,color:[0,0,0],alpha:1};materials.push({mat,color:mat.color.clone()});return mat;
    });if(o.material.length===1)o.material=o.material[0];
    if(o.morphTargetDictionary?.open!==undefined){o.morphTargetInfluences=[...o.morphTargetInfluences];mouths.push(o);}
@@ -35,7 +36,7 @@ function actor(source,name=''){
  // space; it is never a camera-facing replacement mouth or a floating face card.
  root.updateMatrixWorld(true);
  const head=bones.head,headPosition=head.getWorldPosition(new THREE.Vector3());
- const teeth=new THREE.Mesh(new THREE.BoxGeometry(.105,.017,.022),new THREE.MeshToonMaterial({color:0xffffff}));
+ const teeth=new THREE.Mesh(new THREE.BoxGeometry(.105,.017,.022),new THREE.MeshToonMaterial({color:0xffffff,fog:false}));
  teeth.position.set(0,headPosition.y+.028,.151);root.add(teeth);root.updateMatrixWorld(true);head.attach(teeth);teeth.visible=false;
  function pose(name,x=0,y=0,z=0){if(bones[name])bones[name].quaternion.copy(rest[name].q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(x,y,z)));}
  return {root,apply(a,mouth='rest',blink=false,style='flat',smearFrom=null){
@@ -87,6 +88,7 @@ export class Stage {
   this.canvas=canvas;this.renderer=new THREE.WebGLRenderer({canvas,antialias:true,preserveDrawingBuffer:true,alpha:false});
   this.renderer.setPixelRatio(1);this.renderer.outputColorSpace=THREE.SRGBColorSpace;
   this.effect=new OutlineEffect(this.renderer);this.scene=new THREE.Scene();this.scene.add(new THREE.AmbientLight(0xffffff,2));
+  this.scenery=new Scenery(this.scene);
   const sun=new THREE.DirectionalLight(0xffffff,2.1);sun.position.set(-3,5,6);this.scene.add(sun);
   this.actors=[];this.names=[];this.camera=new THREE.OrthographicCamera();this.camera.position.set(0,1,6);
   this.controls=new OrbitControls(this.camera,canvas);this.controls.enableDamping=false;this.controls.target.set(0,1,0);this.controls.enablePan=true;
@@ -102,8 +104,9 @@ export class Stage {
   const sources=await Promise.all(names.map(load));if(ticket!==this.prepareTicket)return;
   for(let i=0;i<2;i++)if(this.names[i]!==names[i]){if(this.actors[i]){this.scene.remove(this.actors[i].root);this.actors[i].dispose();}this.actors[i]=sources[i]?actor(sources[i],names[i]):null;this.names[i]=names[i];if(this.actors[i])this.scene.add(this.actors[i].root);}
  }
- draw(state,width=540,height=960){
+ draw(state,width=540,height=960,{guides}={}){
   this.state=state;this.renderer.setSize(width,height,false);this.scene.background=new THREE.Color(state.scene.background);
+  this.scenery.update(state.scene,guides);
   state.scene.actors.slice(0,state.scene.count).forEach((a,i)=>{const smear=state.smears?.find(s=>s.actor===i);this.actors[i]?.apply(a,state.mouths?.[i],state.blinks?.[i],state.scene.style,smear?{...a,pose:smear.pose,headYaw:smear.headYaw}:null);});
   const c=state.scene.camera,aspect=width/height;
   const next=c.projection==='perspective'?new THREE.PerspectiveCamera(35,aspect,.01,100):new THREE.OrthographicCamera(-1.35*aspect,1.35*aspect,1.35,-1.35,.01,100);
@@ -114,5 +117,5 @@ export class Stage {
  }
  render(){this.effect.render(this.scene,this.camera);}
  async png(){return new Promise((resolve,reject)=>this.canvas.toBlob(b=>b?resolve(b):reject(Error('Image rendering failed')),'image/png'));}
- dispose(){this.controls.dispose();this.actors.forEach(a=>a?.dispose());this.renderer.dispose();}
+ dispose(){this.controls.dispose();this.actors.forEach(a=>a?.dispose());this.scenery.dispose();this.renderer.dispose();}
 }
