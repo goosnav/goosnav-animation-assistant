@@ -4,6 +4,19 @@ Make a small library of drawings for a talking-character clip. Set a fixed camer
 
 Everything renders on your device. The hosted app needs static files only: no animation server, AI subscription, or external speech API. English speech and its phoneme timings come from the bundled Flite WASM engine. The six mouth poses are stylized references, not facial motion capture; the default robot audio and mouth timing are generated together. An optional voiceover follows that timing.
 
+## Characters
+
+Choose any character for A or B on **Stage**. The original actors come from the 3D comic engine. The v12 people come
+from [goosnav-3D-assets](https://github.com/goosnav/goosnav-3D-assets):
+
+- **Guy v12** and **Guy v12 (beady)**: the v10 guy iterated.
+- **Fat guy** and **Fat guy with glasses**: from Book Two.
+- **Little Billy v2**: from his Goosklerf card.
+
+These five talk like their 3D-asset versions. Each of the six mouth references is baked from the real puppet jaw,
+lip shapes and tongue, and the head tips back a little as the mouth opens. Their actors are rebuilt with
+`scripts/export_v12_app_actors.py` in that repository.
+
 ## Start locally
 
 For development, install Node.js 22.12 or newer, then:
@@ -84,7 +97,7 @@ Use HTTPS on iPad for native sharing and microphone access. Keep the app in the 
 ## Source layout
 
 - `app/src/`: clip planner, speech, 3D stage, image/video adapters, persistence, and UI.
-- `app/assets/`: the eight runtime character snapshots and provenance manifest.
+- `app/assets/`: the thirteen runtime character snapshots (eight comic-engine actors, five v12 people) and provenance manifest.
 - `app/launcher/`: managed local bootstrap and product manifest.
 - `tools/`: static build, development server, icons, and native packaging.
 - `tests/`: domain, real speech, archive, local-server, and browser round-trip checks.

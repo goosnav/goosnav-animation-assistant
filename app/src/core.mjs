@@ -1,5 +1,9 @@
 export const MOUTHS = ['rest', 'small', 'open', 'wide', 'round', 'teeth'];
-export const MODELS = ['blue', 'blue-beady', 'rust', 'rust-beady', 'olive', 'olive-beady', 'billy', 'gooby'];
+export const MODELS = ['blue', 'blue-beady', 'rust', 'rust-beady', 'olive', 'olive-beady', 'billy', 'gooby',
+  'v12', 'v12-beady', 'v12-fat', 'v12-fat-glasses', 'billy-v2'];
+// Display names; models without one use their ID. The v12 people come from goosnav-3D-assets.
+export const MODEL_LABELS = { 'v12': 'Guy v12', 'v12-beady': 'Guy v12 (beady)', 'v12-fat': 'Fat guy (v12)',
+  'v12-fat-glasses': 'Fat guy with glasses (v12)', 'billy-v2': 'Little Billy v2' };
 export const POSES = ['stand', 'point', 'shrug', 'open-hand', 'hands-on-hips'];
 export const uid = () => globalThis.crypto.randomUUID();
 export function newProject() {
