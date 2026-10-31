@@ -76,5 +76,61 @@
     "sha256": "c136e19f2c6d38caca91ed2b8a7090377fb3b5e37f2afca0167718b68fdc3e0c",
     "source": "submodules/goosnav-3D-assets/exports/app-actors/actor-billy-v2.glb",
     "sourceCommit": "beaa91a01f4aff1513ff0b33d95554801e08dd80"
+  },
+  {
+    "file": "world-black-pyramids.glb",
+    "sha256": "4254af76f7892b9fb7e43dabcab7e2dbcf9bb2d628b1030be708605cbaadcb08",
+    "source": "submodules/goosnav-3D-assets/environments/theatre-black-pyramids/scene.glb",
+    "sourceCommit": "25f80c5301d80b486015eaa291b6c4ae57f8f3bb"
+  },
+  {
+    "file": "world-red-mesas.glb",
+    "sha256": "ba03e0c271c07eb55805038b88e54e6d9af2c0115869d1e0cfb0394b574fb8a8",
+    "source": "submodules/goosnav-3D-assets/environments/theatre-red-mesas/scene.glb",
+    "sourceCommit": "25f80c5301d80b486015eaa291b6c4ae57f8f3bb"
+  },
+  {
+    "file": "world-space.glb",
+    "sha256": "64596089fc5f1cc10e3020efd23307bee6ab4b1bb115ba7f2b51a508b444209c",
+    "source": "submodules/goosnav-3D-assets/environments/theatre-space/scene.glb",
+    "sourceCommit": "25f80c5301d80b486015eaa291b6c4ae57f8f3bb"
+  },
+  {
+    "file": "world-backrooms.glb",
+    "sha256": "622f0e814febd9909295779a5b60e0832ea9c885701f5c0fb5d116984afd4d14",
+    "source": "submodules/goosnav-3D-assets/environments/theatre-backrooms/scene.glb",
+    "sourceCommit": "25f80c5301d80b486015eaa291b6c4ae57f8f3bb"
+  },
+  {
+    "file": "world-starter-overgrown-courtyard.glb",
+    "sha256": "f630b538be2c1ce5f0f8e8d15d395415b5a41fba6ff30131dbeca8febb17c683",
+    "source": "submodules/goosnav-3D-assets/environments/theatre-starter-overgrown-courtyard/scene.glb",
+    "sourceCommit": "25f80c5301d80b486015eaa291b6c4ae57f8f3bb"
+  },
+  {
+    "file": "world-colonnade.glb",
+    "sha256": "0081fb35ca70668b88f36bca340cc92d0a6730b31c35f529974e016d97695784",
+    "source": "submodules/goosnav-3D-assets/environments/reading-room/scene.glb",
+    "sourceCommit": "25f80c5301d80b486015eaa291b6c4ae57f8f3bb"
+  },
+  {
+    "file": "world-threshold.glb",
+    "sha256": "1b1da805d353642735b921d437b6bd3fe70abe91e8e8778959a47ae6129aab6e",
+    "source": "submodules/goosnav-3D-assets/environments/threshold/scene.glb",
+    "sourceCommit": "25f80c5301d80b486015eaa291b6c4ae57f8f3bb"
+  },
+  {
+    "file": "prop-book.glb",
+    "sha256": "5c84d9d42cd2d23e96881b815a678256a26992f6fd1d27b6bede58818152e9dc",
+    "source": "submodules/goosnav-3D-assets/props/ps1/book2_goosnav_dilemma.glb",
+    "sourceCommit": "25f80c5301d80b486015eaa291b6c4ae57f8f3bb"
+  },
+  {
+    "file": "sky-black-pyramids.jpg",
+    "sha256": "75f74c2eeefe307cefde28804cc5c23e5cd981694ab36c0605224649088062d9",
+    "source": "submodules/goosnav-3D-assets/environments/black-pyramids/skybox.exr",
+    "sourceCommit": "25f80c5301d80b486015eaa291b6c4ae57f8f3bb",
+    "sourceSha256": "ca952364f87c6b775dfcc91a6840b0bcff61704aa6b05074fbbbdaf0d231a96c",
+    "transform": "8K linear EXR to sRGB JPEG quality95, Blender Standard view, exposure0/gamma1; tools/export-stage-skybox.py"
   }
 ]

@@ -32,3 +32,12 @@ test('a blink never extends a zero-pause line or leaks into the next line',()=>{
  assert.equal(c.slots.some(s=>s.active&&s.state.blinks.some(Boolean)),false);
  assert.equal(c.lines[1].start,c.lines[0].end);
 });
+
+test('reference-only perspective guides mark the actual horizon and vanishing direction',async()=>{
+ const {perspectiveGuide,referenceInstruction}=await import('../app/src/reference.mjs');
+ const state={scene:newProject().scene,mouths:['open','rest'],blinks:[false,false]};state.scene.camera.azimuth=0;state.scene.camera.elevation=0;state.scene.camera.projection='perspective';
+ assert.deepEqual(perspectiveGuide(state,1080,1920),{horizon:960,points:[540]});
+ state.scene.camera.elevation=5;assert.ok(perspectiveGuide(state,1080,1920).horizon<960);
+ state.scene.camera.projection='orthographic';assert.equal(perspectiveGuide(state,1080,1920),null);
+ assert.equal(referenceInstruction(state),'');assert.equal(referenceInstruction({...state,motionWipes:[{target:'actor:0'}]}),'WIPE FRAME');
+});

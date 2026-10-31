@@ -29,7 +29,7 @@ test('one artwork upload and no finished-video escape route or instructional wal
  assert.equal((html.match(/id="import-artwork"/g)||[]).length,1);
  assert.doesNotMatch(html,/id="import-(?:video|images|drawing-video)"|data-(?:view|tab)="assemble"|Already animated in Procreate|Bodies hold still|One scene\. A few drawings|Give it your voice/);
  assert.doesNotMatch(js,/state\.video\s*\?|if\(state\.video\)|video\.src=returnedUrl/);
- assert.doesNotMatch(html,/\p{Extended_Pictographic}|\uFE0F/u);
+ assert.doesNotMatch(html.replaceAll('®',''),/\p{Extended_Pictographic}|\uFE0F/u);
  assert.match(html,/<details[^>]*id="draw-help"/);
  assert.match(html,/<details[^>]*id="voiceover-options"/);
 });

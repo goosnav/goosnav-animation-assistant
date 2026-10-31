@@ -4,8 +4,10 @@ import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { OutlineEffect } from 'three/addons/effects/OutlineEffect.js';
 import { Scenery } from './scenery.mjs';
+import { Props } from './props.mjs';
 
 const rad=THREE.MathUtils.degToRad;
+const turnDistance=(from,to)=>Math.abs(THREE.MathUtils.euclideanModulo(to-from+180,360)-180);
 const mouthWeights={rest:[0,0,0],small:[.22,0,0],open:[1,0,0],wide:[.2,0,.8],round:[.12,.88,0],teeth:[.16,0,.52]};
 // v12 people talk with a hinged puppet jaw, lip shapes and a tongue. Their actors carry one baked head
 // morph per mouth state (goosnav-3D-assets scripts/export_v12_app_actors.py), so a state is one morph.
@@ -39,9 +41,9 @@ function actor(source,name=''){
  const teeth=new THREE.Mesh(new THREE.BoxGeometry(.105,.017,.022),new THREE.MeshToonMaterial({color:0xffffff,fog:false}));
  teeth.position.set(0,headPosition.y+.028,.151);root.add(teeth);root.updateMatrixWorld(true);head.attach(teeth);teeth.visible=false;
  function pose(name,x=0,y=0,z=0){if(bones[name])bones[name].quaternion.copy(rest[name].q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(x,y,z)));}
- return {root,apply(a,mouth='rest',blink=false,style='flat',smearFrom=null){
+ return {root,bones,apply(a,mouth='rest',blink=false,style='flat',smearFrom=null){
   for(const [n,b]of Object.entries(bones)){b.quaternion.copy(rest[n].q);b.position.copy(rest[n].p);b.scale.copy(rest[n].s);}
-  root.position.set(a.x,0,a.z);root.rotation.y=rad(a.yaw);root.scale.setScalar(a.scale);
+  root.position.set(a.x,a.y||0,a.z);root.rotation.y=rad(a.yaw);root.scale.setScalar(a.scale);
   // The authored v10 rest already has lowered arms. Keep the library's local
   // joint convention; large opposite Z rotations fold shoulders into the torso.
   let left=[.08,0,.04],right=[.08,0,-.04],fl=[.1,0,0],fr=[.1,0,0];
@@ -49,11 +51,13 @@ function actor(source,name=''){
   if(a.pose==='open-hand'){right=[.73,0,-.24];fr=[.75,0,0];}
   if(a.pose==='shrug'){left=[.3,0,.32];right=[.3,0,-.32];fl=[.9,0,0];fr=[.9,0,0];}
   if(a.pose==='hands-on-hips'){left=[.05,0,.35];right=[.05,0,-.35];fl=[1.4,0,.25];fr=[1.4,0,-.25];}
-  left[0]+=rad(a.armL);right[0]+=rad(a.armR);
+  left[0]+=rad(a.armL||0);right[0]+=rad(a.armR||0);
+  left[2]+=rad(a.armSideL||0);right[2]+=rad(a.armSideR||0);fl[0]+=rad(a.elbowL||0);fr[0]+=rad(a.elbowR||0);
+  pose('spine',rad(a.bodyLean||0),rad(a.bodyTurn||0),0);
   left[2]+=armClear[name]||0;right[2]-=armClear[name]||0;
   pose('upper_armL',...left);pose('upper_armR',...right);pose('forearmL',...fl);pose('forearmR',...fr);
   pose('handL',0,rad(a.handL),0);pose('handR',0,rad(a.handR),0);
-  pose('head',baked.length?-(headLift[mouth]||0):0,rad(a.headYaw),rad(a.headTilt));
+  pose('head',(baked.length?-(headLift[mouth]||0):0)+rad(a.headPitch||0),rad(a.headYaw),rad(a.headTilt));
   // Small face/head translation gives an explicit discrete nose/head accent.
   if(a.nose)bones.head.position.z+=a.nose;
   const weights=mouthWeights[mouth]||mouthWeights.rest;
@@ -88,7 +92,7 @@ export class Stage {
   this.canvas=canvas;this.renderer=new THREE.WebGLRenderer({canvas,antialias:true,preserveDrawingBuffer:true,alpha:false});
   this.renderer.setPixelRatio(1);this.renderer.outputColorSpace=THREE.SRGBColorSpace;
   this.effect=new OutlineEffect(this.renderer);this.scene=new THREE.Scene();this.scene.add(new THREE.AmbientLight(0xffffff,2));
-  this.scenery=new Scenery(this.scene);
+  this.scenery=new Scenery(this.scene);this.props=new Props(this.scene);
   const sun=new THREE.DirectionalLight(0xffffff,2.1);sun.position.set(-3,5,6);this.scene.add(sun);
   this.actors=[];this.names=[];this.camera=new THREE.OrthographicCamera();this.camera.position.set(0,1,6);
   this.controls=new OrbitControls(this.camera,canvas);this.controls.enableDamping=false;this.controls.target.set(0,1,0);this.controls.enablePan=true;
@@ -101,15 +105,28 @@ export class Stage {
  async prepare(scene){
   const ticket=this.prepareTicket=(this.prepareTicket||0)+1;
   const names=scene.actors.slice(0,scene.count).map(a=>a.model);
-  const sources=await Promise.all(names.map(load));if(ticket!==this.prepareTicket)return;
+  const [sources]=await Promise.all([Promise.all(names.map(load)),this.scenery.prepare(scene),this.props.prepare(scene.props)]);if(ticket!==this.prepareTicket)return;
+  this.props.detach();
   for(let i=0;i<2;i++)if(this.names[i]!==names[i]){if(this.actors[i]){this.scene.remove(this.actors[i].root);this.actors[i].dispose();}this.actors[i]=sources[i]?actor(sources[i],names[i]):null;this.names[i]=names[i];if(this.actors[i])this.scene.add(this.actors[i].root);}
  }
  draw(state,width=540,height=960,{guides}={}){
   this.state=state;this.renderer.setSize(width,height,false);this.scene.background=new THREE.Color(state.scene.background);
   this.scenery.update(state.scene,guides);
-  state.scene.actors.slice(0,state.scene.count).forEach((a,i)=>{const smear=state.smears?.find(s=>s.actor===i);this.actors[i]?.apply(a,state.mouths?.[i],state.blinks?.[i],state.scene.style,smear?{...a,pose:smear.pose,headYaw:smear.headYaw}:null);});
+  state.scene.actors.slice(0,state.scene.count).forEach((a,i)=>{
+   const smear=state.smears?.find(s=>s.actor===i),wipe=state.motionWipes?.find(w=>w.target===`actor:${i}`),actor=this.actors[i];
+   actor?.apply(wipe?{...a,...wipe.to}:a,state.mouths?.[i],state.blinks?.[i],state.scene.style,wipe?{...a,...wipe.from}:smear?{...a,pose:smear.pose,headYaw:smear.headYaw}:null);
+   if(wipe&&actor){
+    const from=new THREE.Vector3(wipe.from.x??a.x,wipe.from.y??a.y??0,wipe.from.z??a.z),to=new THREE.Vector3(wipe.to.x??a.x,wipe.to.y??a.y??0,wipe.to.z??a.z),delta=to.sub(from);
+    // Endpoint sampling above resets the root; restore the compiled midpoint
+    // rotation/scale before applying this drawing's temporary stretch.
+    actor.root.position.copy(from.addScaledVector(delta,.5));actor.root.rotation.y=rad(a.yaw);actor.root.scale.setScalar(a.scale);
+    delta.applyAxisAngle(new THREE.Vector3(0,1,0),-rad(a.yaw));actor.root.scale.x*=1+Math.min(2,Math.abs(delta.x)/.45);actor.root.scale.z*=1+Math.min(2,Math.abs(delta.z)/.4);actor.root.scale.y*=1+Math.min(1,Math.abs(delta.y)/1.7);
+    actor.root.scale.x*=1+Math.min(.8,turnDistance(wipe.from.yaw??a.yaw,wipe.to.yaw??a.yaw)/180);
+   }
+  });
+  this.scene.updateMatrixWorld(true);this.props.update(state.scene.props,this.actors,state.motionWipes,state.scene.style);
   const c=state.scene.camera,aspect=width/height;
-  const next=c.projection==='perspective'?new THREE.PerspectiveCamera(35,aspect,.01,100):new THREE.OrthographicCamera(-1.35*aspect,1.35*aspect,1.35,-1.35,.01,100);
+  const next=c.projection==='perspective'?new THREE.PerspectiveCamera(35,aspect,.01,1000):new THREE.OrthographicCamera(-1.35*aspect,1.35*aspect,1.35,-1.35,.01,1000);
   next.zoom=c.projection==='orthographic'?c.zoom:1;
   const target=new THREE.Vector3(c.targetX,c.targetY,0),distance=c.projection==='perspective'?6/c.zoom:6;
   next.position.copy(target).add(new THREE.Vector3().setFromSpherical(new THREE.Spherical(distance,rad(90-c.elevation),rad(c.azimuth))));next.lookAt(target);next.updateProjectionMatrix();
@@ -117,5 +134,5 @@ export class Stage {
  }
  render(){this.effect.render(this.scene,this.camera);}
  async png(){return new Promise((resolve,reject)=>this.canvas.toBlob(b=>b?resolve(b):reject(Error('Image rendering failed')),'image/png'));}
- dispose(){this.controls.dispose();this.actors.forEach(a=>a?.dispose());this.scenery.dispose();this.renderer.dispose();}
+ dispose(){this.controls.dispose();this.props.dispose();this.actors.forEach(a=>a?.dispose());this.scenery.dispose();this.renderer.dispose();}
 }

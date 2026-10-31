@@ -16,3 +16,22 @@
 #drawing-video-result{margin-top:12px}#drawing-video-info{margin-top:8px}
 
 .reference-guides{border:0;padding:0;margin:14px 0;display:flex;gap:24px;flex-wrap:wrap}.reference-guides legend{font:700 13px var(--sans);padding:0;margin-bottom:4px}.reference-guides .check{min-height:44px;margin:0}
+
+/* The controls carry the workflow; entered copy stays editorial. */
+h1,h2,h3,button,.file-button,summary,.steps button{font-family:var(--sans);text-transform:uppercase}h1{font-size:21px;line-height:1.25;letter-spacing:.015em}h1 sup{font-size:.55em;vertical-align:super;margin-right:.16em}input:not([type=range]):not([type=checkbox]):not([type=color]),textarea{font-family:var(--serif)}
+.steps{grid-template-columns:repeat(5,minmax(0,1fr))}.beat-strip,.key-list{display:flex;gap:8px;overflow-x:auto;padding:4px 0 12px;scroll-snap-type:x proximity}.beat-strip:empty,.key-list:empty{display:none}.beat-strip button{flex:0 0 auto;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-left:4px solid var(--blue);font:14px var(--serif);text-transform:none}.key-list button{flex:0 0 auto;min-width:70px;scroll-snap-align:start}.key-list button[aria-pressed=true]{border-color:var(--blue);background:var(--blue);color:white}.key-actions{margin-top:20px}.key-actions button{flex:1}#motion-fields details:first-child{margin-top:10px}#motion-fields input[type=number],#prop-fields input[type=number]{min-width:0;width:100%}#prop-editor{margin-top:16px}.field-pair>button{align-self:end;margin-bottom:12px}#animation-prerequisite{border-left:3px solid var(--yellow);padding-left:12px}.pose-draft #set-key{box-shadow:0 0 0 3px var(--yellow)}
+@media(max-width:700px){h1{font-size:18px}.color-blocks{margin-left:8px}.color-blocks i{width:7px;height:18px}.steps button{font-size:10px;letter-spacing:0;padding-inline:1px}.key-actions{position:sticky;bottom:0;background:white;padding:8px 0;z-index:2}.key-actions button{font-size:12px}.project-tools button{font-size:12px}}
+
+#guide-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}#preview-frame{position:relative}
+
+#motion-fields input[type=number]{width:6em;float:right;padding:6px;margin:0;font-size:16px}#motion-fields input[type=range]{clear:both;width:100%;margin:10px 0}.beat-strip button{font-family:var(--sans);text-transform:uppercase}
+@media(max-width:700px){
+ .workspace:has([data-view=animate]:not([hidden])) .editor{order:0}
+ .workspace:has([data-view=animate]:not([hidden])) .preview-panel{order:-1;position:sticky;top:0;z-index:3;display:grid;grid-template-columns:115px minmax(0,1fr);gap:8px 12px;align-items:start;padding:10px;background:white}
+ .workspace:has([data-view=animate]:not([hidden])) #preview-frame{grid-column:1;grid-row:1/5;width:115px;max-width:115px;margin:0}
+ .workspace:has([data-view=animate]:not([hidden])) .preview-panel .panel-heading{grid-column:2;grid-row:1;margin:0}.workspace:has([data-view=animate]:not([hidden])) .preview-panel .panel-heading h2{font-size:12px}
+ .workspace:has([data-view=animate]:not([hidden])) .playback{grid-column:2;grid-row:2;margin:0;gap:3px}.workspace:has([data-view=animate]:not([hidden])) .playback button{padding:6px;font-size:11px}
+ .workspace:has([data-view=animate]:not([hidden])) #scrub{grid-column:2;grid-row:3;margin:0}
+ .workspace:has([data-view=animate]:not([hidden])) .preview-panel .stats,.workspace:has([data-view=animate]:not([hidden])) .preview-panel .speed-control,.workspace:has([data-view=animate]:not([hidden])) .preview-panel>.check{display:none}
+ .workspace:has([data-view=animate]:not([hidden])) #budget{grid-column:2;grid-row:4;font-size:12px;margin:0}
+}

@@ -1,0 +1,9 @@
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs/promises';import {chromium} from 'playwright';import {build} from 'esbuild';
+const source=(await build({stdin:{contents:"export * from './app/src/reference.mjs';export {newProject} from './app/src/core.mjs';",resolveDir:process.cwd()},bundle:true,format:'esm',write:false})).outputFiles[0].text;
+test('reference PNG visibly prints a red wipe instruction only on wipe drawings',async()=>{
+ const browser=await chromium.launch({headless:true,args:['--no-sandbox']});try{const page=await browser.newPage();await page.route('**/reference-test.mjs',r=>r.fulfill({body:source,contentType:'text/javascript'}));await page.goto('http://127.0.0.1:8793');
+ const result=await page.evaluate(async()=>{const {annotatedReference,newProject}=await import('/reference-test.mjs'),canvas=document.createElement('canvas');canvas.width=1080;canvas.height=1920;const ctx=canvas.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,1080,1920);const src=await new Promise(r=>canvas.toBlob(r)),state={scene:newProject().scene,mouths:['open','round'],blinks:[false,false]},counts=[];let png;
+ for(const wipe of [false,true]){if(wipe)state.motionWipes=[{target:'actor:0'}];const blob=await annotatedReference(src,state,1080,1920),img=await createImageBitmap(blob);ctx.drawImage(img,0,0);img.close();let red=0;const pixels=ctx.getImageData(0,1720,1080,200).data;for(let i=0;i<pixels.length;i+=4)if(pixels[i]>120&&pixels[i]>pixels[i+1]*1.6&&pixels[i]>pixels[i+2]*1.6)red++;counts.push(red);if(wipe)png=[...new Uint8Array(await blob.arrayBuffer())];}return {counts,png};});
+ assert.equal(result.counts[0],0);assert.ok(result.counts[1]>1000,'WIPE FRAME must be rendered visibly in red');await fs.writeFile('.work/verified-wipe-instruction.png',Buffer.from(result.png));
+ }finally{await browser.close();}
+});

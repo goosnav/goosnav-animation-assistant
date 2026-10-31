@@ -5,9 +5,9 @@ import { packProject, unpackProject } from '../app/src/archive.mjs';
 
 function fixture(){const p=core.newProject();p.lines=[{...p.lines[0],id:'a',text:'Ah.'}];return {p,takes:{a:{duration:.5,phones:[{phone:'aa',start:0,end:.5}]}}};}
 test('two shot restores inward facing staging after solo; camera reset preserves actors',()=>{
- const p=core.newProject();assert.deepEqual(p.scene.actors.map(a=>a.yaw),[40,-40]);
+ const p=core.newProject();assert.deepEqual(p.scene.actors.map(a=>a.yaw),[60,-60]);
  const solo=core.withFraming(p,'solo');assert.equal(solo.scene.count,1);assert.equal(solo.scene.actors[0].x,0);assert.equal(solo.scene.actors[0].yaw,0);
- const duet=core.withFraming(solo,'duet');assert.equal(duet.scene.count,2);assert.deepEqual(duet.scene.actors.map(a=>[a.x,a.yaw]),[[-.4,40],[.4,-40]]);
+ const duet=core.withFraming(solo,'duet');assert.equal(duet.scene.count,2);assert.deepEqual(duet.scene.actors.map(a=>[a.x,a.yaw]),[[-.45,60],[.45,-60]]);
  solo.scene.actors[0].yaw=67;solo.scene.camera.azimuth=90;
  const reset=core.withFraming(solo,'reset');assert.deepEqual(reset.scene.actors,solo.scene.actors);assert.equal(reset.scene.count,1);assert.equal(reset.scene.camera.azimuth,0);assert.equal(p.scene.count,2);
 });

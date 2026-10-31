@@ -61,7 +61,7 @@ test('new clips clear previous exports and edit history',async()=>{
   await page.getByText('Speech ready.',{exact:false}).waitFor({timeout:60000});
   await page.getByRole('button',{name:'Draw',exact:true}).click();await page.locator('#drawing-video').click();
   await page.getByText('References ready.',{exact:false}).waitFor({timeout:90000}).catch(async e=>{throw Error(`${e.message}; status: ${await page.locator('#status').textContent()}`);});
-  await page.locator('#new').click();await page.getByText('New clip. Your previous clip',{exact:false}).waitFor();
+  await page.locator('#new').click();await page.getByText('New clip.',{exact:false}).waitFor();
   await page.getByRole('button',{name:'Export',exact:true}).click();assert.equal(await page.locator('#export-result').isVisible(),false);
   await page.locator('#undo').click();assert.equal(await page.locator('#title').inputValue(),'An ordinary conversation');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);

@@ -1,3 +1,4 @@
+import {ACTOR_CHANNELS,animationSettings,applyMotion,validateAnimation,validateProps,validateMotionWipes} from './motion.mjs';
 export const MOUTHS = ['rest', 'small', 'open', 'wide', 'round', 'teeth'];
 export const MODELS = ['blue', 'blue-beady', 'rust', 'rust-beady', 'olive', 'olive-beady', 'billy', 'gooby',
   'v12', 'v12-beady', 'v12-fat', 'v12-fat-glasses', 'billy-v2'];
@@ -9,6 +10,9 @@ export const BACKDROPS = {
   none: {label:'Plain',sky:'#ffffff'},
   'black-pyramids': {label:'Black pyramids',sky:'#e8b897'},
   'red-mesas': {label:'Red mesas',sky:'#c8dce2'},
+  space: {label:'Space',sky:'#111320'},
+  backrooms: {label:'Backrooms',sky:'#d9d0a2'},
+  'starter-overgrown-courtyard': {label:'Overgrown courtyard',sky:'#bdced2'},
   colonnade: {label:'Colonnade',sky:'#e9e4d7'},
   threshold: {label:'Threshold',sky:'#c8d1d5'},
 };
@@ -17,21 +21,23 @@ export function newProject() {
   const actor = (model, x, yaw) => ({ model, x, z: 0, yaw, scale: 1, pose: 'stand', headYaw: 0, headTilt: 0, armL: 0, armR: 0, handL: 0, handR: 0, nose: 0 });
   return { version: 1, id: uid(), title: 'An ordinary conversation', fps: 24, rate: 1,
     scene: { format: 'portrait', style: 'flat', background: '#ffffff', count: 2,
-      camera: { projection: 'orthographic', azimuth: 0, elevation: 5, zoom: 1, targetX: 0, targetY: 1 },
-      actors: [actor('blue', -.4, 40), actor('rust-beady', .4, -40)] },
+      camera: { projection: 'perspective', azimuth: 0, elevation: 5, zoom: 1, targetX: 0, targetY: 1 },
+      actors: [actor('blue', -.45, 60), actor('rust-beady', .45, -60)] },
     lines: [{ id: uid(), actor: 0, text: 'I have a perfectly reasonable question.', rate: 1, pause: .35, pose: 'keep', headYaw: 0, blink: false },
       { id: uid(), actor: 1, text: 'That has never stopped you before.', rate: 1, pause: .5, pose: 'keep', headYaw: 0, blink: false }],
     overrides: [], slots: [], audioOffset: 0, audioTrimStart: 0, audioTrimEnd: 0, audioMode: 'robot' };
 }
 // Presets stage actors deliberately; Reset changes only the camera.
 export function withFraming(project, kind) {
-  if(!['solo','duet','close','wide','reset'].includes(kind))throw Error('Invalid framing');
+  if(!['solo','duet','close','wide','reset','ots-left','ots-right'].includes(kind))throw Error('Invalid framing');
   const p=structuredClone(project);
-  p.scene.camera={projection:'orthographic',azimuth:0,elevation:5,zoom:kind==='close'?1.75:kind==='wide'?.75:1,targetX:kind==='close'?p.scene.actors[0].x:0,targetY:kind==='close'?1.45:1};
+  p.scene.camera={projection:'perspective',azimuth:0,elevation:5,zoom:kind==='close'?1.75:kind==='wide'?.75:1,targetX:kind==='close'?p.scene.actors[0].x:0,targetY:kind==='close'?1.45:1};
   if(kind==='solo'){
     p.scene.count=1;Object.assign(p.scene.actors[0],{x:0,z:0,yaw:0});p.lines.forEach(l=>l.actor=0);
   }else if(kind==='duet'){
-    p.scene.count=2;p.scene.actors.forEach((a,i)=>Object.assign(a,{x:i?.4:-.4,z:0,yaw:i?-40:40}));
+    p.scene.count=2;p.scene.actors.forEach((a,i)=>Object.assign(a,{x:i?.45:-.45,z:0,yaw:i?-60:60}));
+  }else if(kind.startsWith('ots-')){
+    const left=kind==='ots-left';Object.assign(p.scene.camera,{azimuth:left?-45:45,elevation:12,zoom:2.1,targetX:p.scene.actors[left?1:0].x*.55,targetY:1.25});
   }
   return validateProject(p);
 }
@@ -53,7 +59,9 @@ export function validateProject(p) {
   for (const a of p.scene.actors) {
     if (!MODELS.includes(a.model)||!POSES.includes(a.pose)) throw Error('Invalid character or pose');
     for (const [k,min,max] of [['x',-3,3],['z',-2,2],['yaw',-180,180],['scale',.5,1.5],['headYaw',-75,75],['headTilt',-35,35],['armL',-90,90],['armR',-90,90],['handL',-90,90],['handR',-90,90],['nose',-.03,.03]]) finite(a[k],min,max,k);
+    for(const k of ['y','headPitch','armSideL','armSideR','elbowL','elbowR','bodyLean','bodyTurn'])if(a[k]!==undefined)finite(a[k],ACTOR_CHANNELS[k].min,ACTOR_CHANNELS[k].max,k);
   }
+  validateProps(p.scene);validateAnimation(p);
   if (!Array.isArray(p.lines)||p.lines.length>30) throw Error('Use at most 30 lines');
   const ids = new Set();
   for (const l of p.lines) {
@@ -72,6 +80,7 @@ export function validateProject(p) {
     if(!s||typeof s.id!=='string'||!/^d[a-z0-9-]{1,64}$/.test(s.id)||drawingIds.has(s.id)||s.key!==JSON.stringify(s.state))throw Error('Invalid drawing identity');
     drawingIds.add(s.id);
     if(!Array.isArray(s.state?.mouths)||s.state.mouths.length!==2||s.state.mouths.some(m=>!MOUTHS.includes(m))||!Array.isArray(s.state.blinks)||s.state.blinks.length!==2||s.state.blinks.some(b=>typeof b!=='boolean'))throw Error('Invalid drawing state');
+    validateMotionWipes(s.state);
     if(s.state.smears!==undefined){
       if(!Array.isArray(s.state.smears)||!s.state.smears.length||s.state.smears.length>2)throw Error('Invalid drawing smear');
       const actors=new Set();
@@ -82,7 +91,7 @@ export function validateProject(p) {
     }
     const scene=structuredClone(s.state.scene);
     if(scene?.count===1&&scene.actors?.length===1)scene.actors.push(structuredClone(scene.actors[0]));
-    try{validateProject({...p,scene,slots:[],lines:[],overrides:[]});}catch{throw Error('Invalid drawing scene');}
+    try{validateProject({...p,scene,animation:undefined,slots:[],lines:[],overrides:[]});}catch{throw Error('Invalid drawing scene');}
   }
   return p;
 }
@@ -105,23 +114,30 @@ export function phoneMouth(phone) {
   if (['aa','ae','ah','aw','ay'].includes(p)) return 'open';
   return 'small';
 }
-export function compileClip(project, takes, previous = []) {
+export function compileClip(project, takes = {}, previous = []) {
   validateProject(project);
+  const animation=animationSettings(project),silent=animation.mode==='silent';
   const slots=previous.map(s=>({...s,active:false})), byKey=new Map(slots.map(s=>[s.key,s]));
   const lines=[]; let cursor=.3;
-  for (const l of project.lines.filter(l=>l.text.trim())) {
-    const take=takes[l.id]; if (!take?.phones?.length||!(take.duration>0)) throw Error('Generate speech before compiling the clip');
+  for (const l of silent?[]:project.lines.filter(l=>l.text.trim())) {
+    const take=takes[l.id]; if (!take?.phones?.length) throw Error('Generate speech before compiling the clip');
+    finite(take.duration,Number.MIN_VALUE,120,'speech duration');
+    if(!Array.isArray(take.phones)||take.phones.some(p=>typeof p.phone!=='string'||!Number.isFinite(p.start)||!Number.isFinite(p.end)||p.start<0||p.end<p.start||p.end>take.duration+.05))throw Error('Invalid speech phoneme timing');
     lines.push({...l,start:cursor,end:cursor+take.duration,take});cursor+=take.duration+l.pause;
   }
-  if (!lines.length) throw Error('Write at least one line of dialogue');
-  if (cursor+.5>120) throw Error('This clip exceeds two minutes. Split it into shorter clips.');
+  if (!silent&&!lines.length) throw Error('Write at least one line of dialogue');
+  // Include the destination drawing when the final key itself extends the clip.
+  const lastKey=Math.max(0,...animation.keys.map(k=>k.time));
+  const keyedDuration=animation.keys.length?Math.min(120,(Math.ceil(lastKey*project.fps-.5)+1)/project.fps):0;
+  const duration=Math.max(silent?0:cursor+.5,animation.duration,keyedDuration);
+  if (duration>120) throw Error('This clip exceeds two minutes. Split it into shorter clips.');
   // A pause blink has a closed mouth, so repeated accents reuse one drawing
   // instead of needing a new blink variant for each spoken mouth shape.
   const blinks=lines.filter(l=>l.blink&&l.pause>0).map(l=>{
     const duration=Math.min(3/project.fps,l.pause);
     return {actor:l.actor,start:l.end+(l.pause-duration)/2,end:l.end+(l.pause+duration)/2};
   });
-  const totalFrames=Math.ceil((cursor+.5)*project.fps), exposures=[];
+  const totalFrames=Math.ceil(duration*project.fps), exposures=[];
   function frameState(f){
     const t=(f+.5)/project.fps, line=lines.find(l=>t>=l.start&&t<l.end);
     const state={scene:structuredClone(project.scene),mouths:['rest','rest'],blinks:[false,false]};
@@ -162,8 +178,13 @@ export function compileClip(project, takes, previous = []) {
         state.smears.push({actor,pose:b.pose,headYaw:b.headYaw});
       }
     }
+    const sampleTime=(f+.5)/project.fps;
+    applyMotion(state,project,duration===120&&f===totalFrames-1?Math.max(sampleTime,lastKey):sampleTime,project.fps);
     const key=JSON.stringify(state);let slot=byKey.get(key);
-    if(!slot){slot={id:`d${uid()}`,key,state};byKey.set(key,slot);slots.push(slot);}
+    if(!slot){
+      if(slots.length>=2000)throw Error('Drawing library exceeds 2000 drawings. Use fewer keys or fewer drawings per move, or start a new clip.');
+      slot={id:`d${uid()}`,key,state};byKey.set(key,slot);slots.push(slot);
+    }
     slot.active=true;
     const last=exposures.at(-1);
     if(last?.slotId===slot.id)last.endFrame=f+1;else exposures.push({slotId:slot.id,startFrame:f,endFrame:f+1});

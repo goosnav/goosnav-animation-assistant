@@ -13,7 +13,7 @@ test('backdrops and reference grids render in 3D and switching them releases geo
   await page.route('**/scene-tools.mjs',r=>r.fulfill({contentType:'text/javascript',body:harness}));await page.goto('http://127.0.0.1:8793');
   const result=await page.evaluate(async()=>{
    const {Stage,newProject,Vector3}=await import('/scene-tools.mjs'),p=newProject(),canvas=document.createElement('canvas'),stage=new Stage(canvas),copy=document.createElement('canvas');copy.width=540;copy.height=960;const ctx=copy.getContext('2d');
-   const state={scene:p.scene,mouths:['rest','rest'],blinks:[false,false]};
+   p.scene.camera.projection='orthographic';const state={scene:p.scene,mouths:['rest','rest'],blinks:[false,false]};
    const capture=()=>{ctx.drawImage(canvas,0,0);return ctx.getImageData(0,0,540,960).data;};
    const diff=(a,b)=>{let n=0;for(let i=0;i<a.length;i+=4)if(Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2])>20)n++;return n;};
    const png=()=>copy.toDataURL().split(',')[1];
@@ -21,15 +21,15 @@ test('backdrops and reference grids render in 3D and switching them releases geo
     await stage.prepare(p.scene);stage.draw(state,540,960);const plain=capture(),geometry=stage.renderer.info.memory.geometries;
     const grids={};for(const name of ['ground','backdrop']){stage.draw(state,540,960,{guides:{[name]:true}});grids[name]=diff(plain,capture());}
     stage.draw(state,540,960,{guides:{ground:true,backdrop:true}});capture();const gridPng=png();
-    p.scene.camera.projection='perspective';stage.draw(state,540,960,{guides:{ground:true,backdrop:true}});capture();const perspectivePng=png(),floorPoint=new Vector3(.5,.008,1.23).project(stage.camera),floorPixel=[...ctx.getImageData(Math.round((floorPoint.x+1)*270),Math.round((1-floorPoint.y)*480),1,1).data];p.scene.camera.projection='orthographic';
+    p.scene.camera.projection='perspective';stage.draw(state,540,960,{guides:{ground:true,backdrop:true}});capture();const perspectivePng=png(),floorPoint=new Vector3(.5,.012,1.23).project(stage.camera),floorPixel=[...ctx.getImageData(Math.round((floorPoint.x+1)*270),Math.round((1-floorPoint.y)*480),1,1).data];p.scene.camera.projection='orthographic';
     stage.draw(state,540,960);const reset=diff(plain,capture()),backdrops={};
     for(const name of ['black-pyramids','red-mesas','colonnade','threshold']){
-     p.scene.backdrop=name;const skies={'black-pyramids':'#e8b897','red-mesas':'#c8dce2',colonnade:'#e9e4d7',threshold:'#c8d1d5'};p.scene.background=skies[name];stage.draw(state,540,960);const pixels=capture();backdrops[name]={diff:diff(plain,pixels),png:png()};
+     p.scene.backdrop=name;const skies={'black-pyramids':'#e8b897','red-mesas':'#c8dce2',colonnade:'#e9e4d7',threshold:'#c8d1d5'};p.scene.background=skies[name];await stage.prepare(p.scene);stage.draw(state,540,960);const pixels=capture();backdrops[name]={diff:diff(plain,pixels),png:png()};
      p.scene.camera.azimuth=25;stage.draw(state,540,960);backdrops[name].orbit=diff(pixels,capture());p.scene.camera.azimuth=0;
     }
-    for(let i=0;i<8;i++){p.scene.backdrop=i%2?'threshold':'red-mesas';stage.draw(state,540,960,{guides:{ground:true}});}
-    p.scene.backdrop='none';p.scene.background='#ffffff';stage.draw(state,540,960);const after=stage.renderer.info.memory.geometries,finalReset=diff(plain,capture());
-    p.scene.camera.projection='perspective';p.scene.camera.zoom=.4;stage.draw(state,540,960);const wide=capture();p.scene.backdrop='red-mesas';stage.draw(state,540,960);const scenery=capture();let actorDelta=0,actorPixels=0;
+    for(let i=0;i<8;i++){p.scene.backdrop=i%2?'threshold':'red-mesas';await stage.prepare(p.scene);stage.draw(state,540,960,{guides:{ground:true}});}
+    p.scene.backdrop='none';p.scene.background='#ffffff';await stage.prepare(p.scene);stage.draw(state,540,960);const after=stage.renderer.info.memory.geometries,finalReset=diff(plain,capture());
+    p.scene.camera.projection='perspective';p.scene.camera.zoom=.4;stage.draw(state,540,960);const wide=capture();p.scene.backdrop='red-mesas';await stage.prepare(p.scene);stage.draw(state,540,960);const scenery=capture();let actorDelta=0,actorPixels=0;
     const blue=i=>wide[i+2]>wide[i]*1.2&&wide[i+1]>wide[i]*1.1;
     for(let i=540*4;i<wide.length-540*4;i+=4)if(blue(i)&&blue(i-4)&&blue(i+4)&&blue(i-540*4)&&blue(i+540*4)){actorPixels++;actorDelta=Math.max(actorDelta,Math.abs(wide[i]-scenery[i])+Math.abs(wide[i+1]-scenery[i+1])+Math.abs(wide[i+2]-scenery[i+2]));}
     return {grids,gridPng,perspectivePng,floorPixel,reset,backdrops,geometry,after,finalReset,actorDelta,actorPixels};
@@ -47,10 +47,10 @@ test('tablet staging controls persist; reference grid changes rebuild guides wit
  try{
   const page=await browser.newPage({viewport:{width:820,height:1180}}),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('http://127.0.0.1:8793');
   const turn=i=>page.locator(`[data-actor="${i}"][data-key=yaw]`);
-  assert.equal(await turn(0).inputValue(),'40');assert.equal(await turn(1).inputValue(),'-40');
+  assert.equal(await turn(0).inputValue(),'60');assert.equal(await turn(1).inputValue(),'-60');
   await page.locator('[data-framing=solo]').click();await page.locator('#reset-camera').click();assert.equal(await page.locator('#cast-count').inputValue(),'1');assert.equal(await turn(0).inputValue(),'0');
-  await page.locator('[data-framing=duet]').click();assert.equal(await page.locator('#cast-count').inputValue(),'2');assert.equal(await turn(1).inputValue(),'-40');
-  await page.locator('#cast-count').selectOption('1');assert.equal(await turn(0).inputValue(),'0');await page.locator('#cast-count').selectOption('2');assert.equal(await turn(0).inputValue(),'40');assert.equal(await turn(1).inputValue(),'-40');
+  await page.locator('[data-framing=duet]').click();assert.equal(await page.locator('#cast-count').inputValue(),'2');assert.equal(await turn(1).inputValue(),'-60');
+  await page.locator('#cast-count').selectOption('1');assert.equal(await turn(0).inputValue(),'0');await page.locator('#cast-count').selectOption('2');assert.equal(await turn(0).inputValue(),'60');assert.equal(await turn(1).inputValue(),'-60');
   await page.locator('#backdrop').selectOption('red-mesas');assert.equal(await page.locator('#background').inputValue(),'#c8dce2');
   await page.locator('#projection').selectOption('perspective');await page.locator('#ground-grid').check();await page.locator('#backdrop-grid').check();
   await page.screenshot({path:'.work/staging-ipad.png',fullPage:true});

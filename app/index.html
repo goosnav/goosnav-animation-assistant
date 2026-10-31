@@ -1,18 +1,18 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#ffffff"><title>Goosnav Animation Assistant</title><link rel="stylesheet" href="style.css"><script type="module" src="app.mjs"></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#ffffff"><title>GOOSNAV® ANIMATION ASSISTANT</title><link rel="stylesheet" href="style.css"><script type="module" src="app.mjs"></script></head>
 <body>
-<header><h1>Animation Assistant<span class="color-blocks" aria-hidden="true"><i></i><i></i><i></i><i></i></span></h1><div class="project-tools"><button id="new">New</button><button id="duplicate">Duplicate</button><button id="undo">Undo</button><button id="redo">Redo</button><details><summary>Project</summary><div class="menu"><button id="save-project">Save backup</button><label class="file-button">Open backup<input id="open-project" type="file" accept=".zip"></label><button id="quit-local" hidden>Quit</button></div></details></div></header>
+<header><h1>GOOSNAV<sup>®</sup> ANIMATION ASSISTANT<span class="color-blocks" aria-hidden="true"><i></i><i></i><i></i><i></i></span></h1><div class="project-tools"><button id="new" title="Clear project to defaults">Clear</button><button id="duplicate">Duplicate</button><button id="undo">Undo</button><button id="redo">Redo</button><details><summary>Project</summary><div class="menu"><button id="save-project">Save backup</button><label class="file-button">Open backup<input id="open-project" type="file" accept=".zip"></label><button id="quit-local" hidden>Quit</button></div></details></div></header>
 <main>
  <div class="project-title"><label>Clip<input id="title" maxlength="200" value="An ordinary conversation"></label><p id="saved" role="status">Loading…</p></div>
  <details id="saved-clips"><summary>Saved clips</summary><div id="saved-list" class="button-list"></div></details>
- <nav class="steps" aria-label="Animation steps"><button data-tab="stage" aria-current="step">Scene</button><button data-tab="rehearse">Speech</button><button data-tab="draw">Draw</button><button data-tab="finish">Export</button></nav>
+ <nav class="steps" aria-label="Animation steps"><button data-tab="stage" aria-current="step">Scene</button><button data-tab="rehearse">Speech</button><button data-tab="animate">Animation</button><button data-tab="draw">Draw</button><button data-tab="finish">Export</button></nav>
  <div id="status" class="status" role="status" aria-live="polite">Loading…</div>
  <div id="busy-panel" hidden><progress id="progress"></progress><button id="cancel">Cancel</button></div>
  <div class="workspace">
   <aside class="preview-panel">
    <div class="panel-heading"><h2>Preview</h2><span id="preview-badge" class="tag">3D GUIDE</span></div>
-   <div id="preview-frame" class="portrait"><canvas id="stage-canvas" aria-label="3D scene preview"></canvas><canvas id="art-canvas" hidden aria-label="Hand-drawn animation preview"></canvas><div id="countdown" hidden></div></div>
+   <div id="preview-frame" class="portrait"><canvas id="stage-canvas" aria-label="3D scene preview"></canvas><canvas id="guide-canvas" aria-hidden="true"></canvas><canvas id="art-canvas" hidden aria-label="Hand-drawn animation preview"></canvas><div id="countdown" hidden></div></div>
    <div class="playback"><button id="play" aria-label="Play animation">Play</button><button id="prev-frame" aria-label="Previous frame">−1</button><button id="next-frame" aria-label="Next frame">+1</button><output id="time">0.00 / 0.00 s</output></div>
    <label class="sr-only" for="scrub">Animation position</label><input id="scrub" type="range" min="0" max="1" value="0" step="0.041667">
    <label class="speed-control">Speech speed <output id="rate-label">1.00×</output><input id="rate" type="range" min=".5" max="2" step=".05" value="1"><span class="range-ends"><span>Slower</span><span>Faster</span></span></label>
@@ -28,16 +28,35 @@
     <label>Backdrop<select id="backdrop"></select></label>
     <fieldset class="reference-guides"><legend>Reference grids</legend><label class="check"><input id="ground-grid" type="checkbox"> Ground</label><label class="check"><input id="backdrop-grid" type="checkbox"> Backdrop</label></fieldset>
     <div class="subheading"><h3>Camera</h3><button id="reset-camera">Reset</button></div>
-    <div class="preset-row"><button data-framing="duet">Two shot</button><button data-framing="solo">Solo</button><button data-framing="close">Close-up</button><button data-framing="wide">Wide</button></div>
+    <div class="preset-row"><button data-framing="duet">Two shot</button><button data-framing="solo">Solo</button><button data-framing="close">Close-up</button><button data-framing="wide">Wide</button><button data-framing="ots-left">Over A</button><button data-framing="ots-right">Over B</button></div>
     <label>Projection<select id="projection"><option value="orthographic">Orthographic</option><option value="perspective">Perspective</option></select></label>
     <div id="camera-fields" class="sliders"></div>
     <h3 class="rule-heading">Characters</h3><div id="actor-fields"></div>
+    <details id="objects"><summary>Objects</summary>
+     <div class="field-pair"><label>Add object<select id="prop-kind"><option value="book">Goosnav book</option><option value="cube">Cube</option><option value="prism">Prism</option><option value="sphere">Sphere</option></select></label><button id="add-prop">Add</button></div>
+     <div id="prop-editor" hidden><div class="field-pair"><label>Object<select id="prop-select"></select></label><button id="remove-prop">Remove</button></div><label>Attach to<select id="prop-attachment"></select></label><div id="prop-fields"></div><label>Color<input id="prop-color" type="color"></label></div>
+    </details>
    </section>
    <section data-view="rehearse" hidden>
     <h2>Speech</h2>
     <div id="lines"></div><button id="add-line">Add line</button>
     <button id="generate" class="primary wide">Generate speech</button>
     <details><summary>Mouth correction</summary><div class="field-pair"><label>Character<select id="override-actor"><option value="0">A</option><option value="1">B</option></select></label><label>Mouth<select id="override-mouth"></select></label><label>Frames<input id="override-frames" type="number" min="1" max="48" value="2"></label></div><button id="apply-mouth">Apply at playhead</button><button id="clear-mouths">Reset corrections</button></details>
+   </section>
+   <section data-view="animate" hidden>
+    <h2>Animation</h2>
+    <div class="field-pair"><label>Timing<select id="timing-mode"><option value="speech">Dialogue</option><option value="silent">Silent clip</option></select></label><label id="clip-length-label">Duration (s)<input id="clip-length" type="number" min=".5" max="120" step=".1" value="5"></label></div>
+    <p id="animation-prerequisite" class="hint" hidden>Generate speech, or choose Silent clip.</p>
+    <div id="animation-tools">
+     <div id="speech-beats" class="beat-strip" aria-label="Dialogue timing"></div>
+     <label class="sr-only" for="animation-scrub">Animation playhead</label><input id="animation-scrub" type="range" min="0" max="5" step=".041667" value="0">
+     <div class="field-pair"><label>Time (s)<input id="key-time" type="number" min="0" max="120" step=".041667" value="0"></label><label>Animate<select id="motion-target"></select></label></div>
+     <div id="key-list" class="key-list" aria-label="Keyframes"></div>
+     <div class="field-pair"><label>Action<select id="gesture-preset"></select></label><button id="add-gesture">Add action</button></div>
+     <div class="field-pair"><label>Arrive with<select id="key-transition"><option value="auto">Auto</option><option value="ease">Ease</option><option value="hold">Hold / cut</option><option value="wipe">Wipe</option></select></label><label>Drawings per move<select id="motion-drawings"><option value="3">3 · economical</option><option value="5">5</option><option value="9">9 · smoother</option></select></label></div>
+     <label id="key-position-label" hidden>Key time (s)<input id="key-position" type="number" min="0" max="120" step=".041667"></label><div id="motion-fields"></div>
+     <div class="button-list key-actions"><button id="set-key" class="primary">Set keyframe</button><button id="remove-key">Remove keyframe</button><button id="discard-pose" hidden>Discard pose</button></div>
+    </div>
    </section>
    <section data-view="draw" hidden>
     <h2>Drawings</h2>
