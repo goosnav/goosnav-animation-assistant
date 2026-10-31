@@ -5,6 +5,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { OutlineEffect } from 'three/addons/effects/OutlineEffect.js';
 import { Scenery } from './scenery.mjs';
 import { Props } from './props.mjs';
+import { actorEffects,reach } from './rig-actions.mjs';
 
 const rad=THREE.MathUtils.degToRad;
 const turnDistance=(from,to)=>Math.abs(THREE.MathUtils.euclideanModulo(to-from+180,360)-180);
@@ -40,10 +41,14 @@ function actor(source,name=''){
  const head=bones.head,headPosition=head.getWorldPosition(new THREE.Vector3());
  const teeth=new THREE.Mesh(new THREE.BoxGeometry(.105,.017,.022),new THREE.MeshToonMaterial({color:0xffffff,fog:false}));
  teeth.position.set(0,headPosition.y+.028,.151);root.add(teeth);root.updateMatrixWorld(true);head.attach(teeth);teeth.visible=false;
+ const effects=actorEffects(root,bones);
  function pose(name,x=0,y=0,z=0){if(bones[name])bones[name].quaternion.copy(rest[name].q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(x,y,z)));}
- return {root,bones,apply(a,mouth='rest',blink=false,style='flat',smearFrom=null){
+ return {root,bones,noseTip:effects.noseTip,apply(a,mouth='rest',blink=false,style='flat',smearFrom=null){
   for(const [n,b]of Object.entries(bones)){b.quaternion.copy(rest[n].q);b.position.copy(rest[n].p);b.scale.copy(rest[n].s);}
-  root.position.set(a.x,a.y||0,a.z);root.rotation.y=rad(a.yaw);root.scale.setScalar(a.scale);
+  root.position.set(a.x,a.y||0,a.z);root.rotation.set(rad(a.rootPitch||0),rad(a.yaw),rad(a.rootRoll||0));root.scale.set(a.scale*(1+.8*(a.flatten||0)),a.scale*(1-.94*(a.flatten||0)),a.scale*(1+.55*(a.flatten||0)));
+  root.updateMatrixWorld(true);
+  const restFeet=Object.fromEntries(['L','R'].map(side=>[side,bones[`foot${side}`]?.getWorldPosition(new THREE.Vector3())]));
+  const restFootRotations=Object.fromEntries(['L','R'].map(side=>[side,bones[`foot${side}`]?.getWorldQuaternion(new THREE.Quaternion())]));
   // The authored v10 rest already has lowered arms. Keep the library's local
   // joint convention; large opposite Z rotations fold shoulders into the torso.
   let left=[.08,0,.04],right=[.08,0,-.04],fl=[.1,0,0],fr=[.1,0,0];
@@ -57,7 +62,27 @@ function actor(source,name=''){
   left[2]+=armClear[name]||0;right[2]-=armClear[name]||0;
   pose('upper_armL',...left);pose('upper_armR',...right);pose('forearmL',...fl);pose('forearmR',...fr);
   pose('handL',0,rad(a.handL),0);pose('handR',0,rad(a.handR),0);
-  pose('head',(baked.length?-(headLift[mouth]||0):0)+rad(a.headPitch||0),rad(a.headYaw),rad(a.headTilt));
+  for(const side of ['L','R']){pose(`thigh${side}`,rad(a[`thigh${side}`]||0));pose(`shin${side}`,rad(a[`knee${side}`]||0));pose(`foot${side}`,rad(a[`foot${side}`]||0));}
+  pose('head',(baked.length?-(headLift[mouth]||0):0)+rad(a.headPitch||0),rad((a.headYaw||0)+(a.headSpin||0)),rad(a.headTilt||0));
+  bones.head.scale.multiplyScalar(a.headScale??1);for(const side of ['L','R'])bones[`hand${side}`]?.scale.multiplyScalar(a.handScale??1);
+  for(const side of ['L','R'])for(const digit of ['f11','f12','f21','f22','f31','f32','thumb1','thumb2']){const curl=Math.max(a[`fingerCurl${side}`]||0,digit.startsWith('f1')?0:a[`fingerPoint${side}`]||0);pose(`${digit}${side}`,curl*1.35);}
+  effects.apply(a);
+  if(a.footIK)for(const side of ['L','R']){
+   const end=bones[`foot${side}`],target=restFeet[side];if(!target)continue;target.add(new THREE.Vector3(Math.sin(rad(a.yaw)),0,Math.cos(rad(a.yaw))).multiplyScalar(a[`footForward${side}`]||0));target.y+=(a.groundY||0)-(a.y||0)+(a[`footLift${side}`]||0);
+   const flat=restFootRotations[side];reach(root,[bones[`thigh${side}`],bones[`shin${side}`]],end,target,a.footIK,64);end.quaternion.copy(end.parent.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(flat));
+  }
+  if(bones.forearmR)bones.forearmR.scale.y*=a.armStretchR??1;
+  if(a.contactLeft){bones.forearmL.scale.y*=a.armStretchR??1;reach(root,[bones.upper_armL,bones.forearmL],bones.handL,new THREE.Vector3(a.contactLX,a.contactLY,a.contactLZ),a.contactLeft);}
+  if(a.contact){
+   const forward=new THREE.Vector3(Math.sin(rad(a.yaw)),0,Math.cos(rad(a.yaw))),target=new THREE.Vector3(a.contactX,a.contactY,a.contactZ),shape=a.contactHand||0;
+   if(shape)target.addScaledVector(forward,shape>2.5?-.04:shape>1.5?-.018:-.055);
+   reach(root,[bones.upper_armR,bones.forearmR],bones.handR,target,a.contact);
+   if(shape&&bones.f11R){
+    root.updateMatrixWorld(true);const hand=bones.handR,axis=bones.f11R.getWorldPosition(new THREE.Vector3()).sub(hand.getWorldPosition(new THREE.Vector3())).normalize(),direction=shape>1.5&&shape<2.5?new THREE.Vector3(0,1,0):forward,world=hand.getWorldQuaternion(new THREE.Quaternion());
+    const q=hand.parent.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(new THREE.Quaternion().setFromUnitVectors(axis,direction).multiply(world));hand.quaternion.slerp(q,a.contact);
+   }
+  }
+  if(a.noseGrip&&effects.nose){root.updateMatrixWorld(true);reach(root,[bones.upper_armR,bones.forearmR],bones.handR,effects.nose.getWorldPosition(new THREE.Vector3()),a.noseGrip);}
   // Small face/head translation gives an explicit discrete nose/head accent.
   if(a.nose)bones.head.position.z+=a.nose;
   const weights=mouthWeights[mouth]||mouthWeights.rest;
@@ -84,7 +109,7 @@ function actor(source,name=''){
     }
    }
   }
- },dispose(){root.traverse(o=>{if(o.isMesh){for(const m of Array.isArray(o.material)?o.material:[o.material])m.dispose();}});teeth.geometry.dispose();}};
+ },dispose(){effects.dispose();root.traverse(o=>{if(o.isMesh){for(const m of Array.isArray(o.material)?o.material:[o.material])m.dispose();}});teeth.geometry.dispose();}};
 }
 
 export class Stage {
@@ -124,6 +149,9 @@ export class Stage {
     actor.root.scale.x*=1+Math.min(.8,turnDistance(wipe.from.yaw??a.yaw,wipe.to.yaw??a.yaw)/180);
    }
   });
+  if(state.scene.count===2&&state.scene.actors.every(a=>a.noseContact)){
+   this.scene.updateMatrixWorld(true);const tips=this.actors.map(a=>a.noseTip()),weight=Math.min(...state.scene.actors.map(a=>a.noseContact)),delta=tips[1].sub(tips[0]).multiplyScalar(weight*.5);this.actors[0].root.position.add(delta);this.actors[1].root.position.sub(delta);
+  }
   this.scene.updateMatrixWorld(true);this.props.update(state.scene.props,this.actors,state.motionWipes,state.scene.style);
   const c=state.scene.camera,aspect=width/height;
   const next=c.projection==='perspective'?new THREE.PerspectiveCamera(35,aspect,.01,1000):new THREE.OrthographicCamera(-1.35*aspect,1.35*aspect,1.35,-1.35,.01,1000);

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { goose,articulatedBook } from './prop-actions.mjs';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 const rad=THREE.MathUtils.degToRad;
 const turnDistance=(from,to)=>Math.abs(THREE.MathUtils.euclideanModulo(to-from+180,360)-180);
@@ -13,7 +14,7 @@ function primitive(kind){
  return new THREE.BoxGeometry(1,1,1);
 }
 function make(p,source){
- const root=new THREE.Group();let body;
+ const root=new THREE.Group();let body,dynamic;
  if(p.kind==='book'){
   body=source.clone(true);body.updateMatrixWorld(true);
   const box=new THREE.Box3().setFromObject(body),center=box.getCenter(new THREE.Vector3());
@@ -23,8 +24,10 @@ function make(p,source){
   const bounds=new THREE.Box3().setFromObject(orient),s=bounds.getSize(new THREE.Vector3());
   const normalized=new THREE.Group();normalized.scale.set(1/s.x,1/s.y,1/s.z);normalized.add(orient);body=normalized;
   body.traverse(o=>{if(o.isMesh){o.geometry=o.geometry.clone();const ms=(Array.isArray(o.material)?o.material:[o.material]).map(m=>{const n=m.clone();n.userData.outlineParameters={thickness:.002,color:[0,0,0]};return n;});o.material=Array.isArray(o.material)?ms:ms[0];}});
- }else body=new THREE.Mesh(primitive(p.kind),new THREE.MeshToonMaterial({color:p.color||'#c87843'}));
- root.add(body);return {root,body,kind:p.kind};
+  dynamic=articulatedBook(source);root.add(dynamic.root);dynamic.root.visible=false;dynamic.root.scale.setScalar(0);
+ }else if(p.kind==='goose')body=goose();
+ else body=new THREE.Mesh(primitive(p.kind),new THREE.MeshToonMaterial({color:p.color||'#c87843'}));
+ root.add(body);return {root,body,bodyScale:body.scale.clone(),dynamic,kind:p.kind};
 }
 function dispose(p){p.root.removeFromParent();p.root.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material)for(const m of Array.isArray(o.material)?o.material:[o.material])m.dispose();});}
 export class Props{
@@ -45,7 +48,8 @@ export class Props{
    const hand=match?actors[+match[1]]?.bones[`hand${match[2]==='left'?'L':'R'}`]:null;
    const parent=hand||this.scene;if(root.parent!==parent)parent.add(root);
    if(match&&!hand){root.visible=false;continue;}
-   if(item.kind!=='book')item.body.material.color.set(style==='line'?'white':p.color||'#c87843');
+   if(item.kind==='book'){const animated=p.open!==undefined||p.page!==undefined;item.body.visible=!animated;item.body.scale.copy(item.bodyScale).multiplyScalar(animated?0:1);item.dynamic.root.visible=animated;item.dynamic.root.scale.setScalar(animated?1:0);if(animated){root.scale.setScalar(1);item.dynamic.update(p);}}
+   if(!['book','goose'].includes(item.kind))item.body.material.color.set(style==='line'?'white':p.color||'#c87843');
    const wipe=wipes.find(w=>w.target===`prop:${p.id}`);
    if(wipe){
     const from=new THREE.Vector3(wipe.from.x??p.x,wipe.from.y??p.y,wipe.from.z??p.z),to=new THREE.Vector3(wipe.to.x??p.x,wipe.to.y??p.y,wipe.to.z??p.z),delta=to.sub(from);

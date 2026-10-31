@@ -29,13 +29,15 @@ export function newProject() {
 }
 // Presets stage actors deliberately; Reset changes only the camera.
 export function withFraming(project, kind) {
-  if(!['solo','duet','close','wide','reset','ots-left','ots-right'].includes(kind))throw Error('Invalid framing');
+  if(!['solo','duet','close','wide','reset','ots-left','ots-right','three-point'].includes(kind))throw Error('Invalid framing');
   const p=structuredClone(project);
   p.scene.camera={projection:'perspective',azimuth:0,elevation:5,zoom:kind==='close'?1.75:kind==='wide'?.75:1,targetX:kind==='close'?p.scene.actors[0].x:0,targetY:kind==='close'?1.45:1};
   if(kind==='solo'){
     p.scene.count=1;Object.assign(p.scene.actors[0],{x:0,z:0,yaw:0});p.lines.forEach(l=>l.actor=0);
   }else if(kind==='duet'){
     p.scene.count=2;p.scene.actors.forEach((a,i)=>Object.assign(a,{x:i?.45:-.45,z:0,yaw:i?-60:60}));
+  }else if(kind==='three-point'){
+    Object.assign(p.scene.camera,{azimuth:25,elevation:18});p.guides={ground:true,backdrop:true};
   }else if(kind.startsWith('ots-')){
     const left=kind==='ots-left';Object.assign(p.scene.camera,{azimuth:left?-45:45,elevation:12,zoom:2.1,targetX:p.scene.actors[left?1:0].x*.55,targetY:1.25});
   }
@@ -58,8 +60,8 @@ export function validateProject(p) {
   for(const [k,min,max] of [['azimuth',-180,180],['elevation',-45,75],['zoom',.4,3],['targetX',-3,3],['targetY',0,3]]) finite(p.scene.camera[k],min,max,`camera ${k}`);
   for (const a of p.scene.actors) {
     if (!MODELS.includes(a.model)||!POSES.includes(a.pose)) throw Error('Invalid character or pose');
-    for (const [k,min,max] of [['x',-3,3],['z',-2,2],['yaw',-180,180],['scale',.5,1.5],['headYaw',-75,75],['headTilt',-35,35],['armL',-90,90],['armR',-90,90],['handL',-90,90],['handR',-90,90],['nose',-.03,.03]]) finite(a[k],min,max,k);
-    for(const k of ['y','headPitch','armSideL','armSideR','elbowL','elbowR','bodyLean','bodyTurn'])if(a[k]!==undefined)finite(a[k],ACTOR_CHANNELS[k].min,ACTOR_CHANNELS[k].max,k);
+    const required=['x','z','yaw','scale','headYaw','headTilt','armL','armR','handL','handR','nose'];
+    for(const [k,d] of Object.entries(ACTOR_CHANNELS))if(required.includes(k)||a[k]!==undefined)finite(a[k],d.min,d.max,k);
   }
   validateProps(p.scene);validateAnimation(p);
   if (!Array.isArray(p.lines)||p.lines.length>30) throw Error('Use at most 30 lines');

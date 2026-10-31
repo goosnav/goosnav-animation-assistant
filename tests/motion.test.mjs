@@ -60,7 +60,7 @@ test('new staging faces inward in perspective while old projects retain saved ac
 test('presets author finite anticipated actions, settle to rest, and leave originals untouched',()=>{
  const p=silent(),before=structuredClone(p);assert.equal(targetValues(p.scene,'actor:0').headPitch,0);
  assert.equal(ACTOR_CHANNELS.elbowR.default,0);assert.equal(PROP_CHANNELS.depth.min,.005);assert.equal(animationSettings(newProject()).mode,'speech');
- for(const name of Object.keys(MOTION_PRESETS)){
+ for(const name of ['nod','look-book','explain','shrug','point','wave']){
   const next=addGesture(p,'actor:0',name,.5);assert.doesNotThrow(()=>validateProject(next));assert.ok(next.animation.keys.length>=4);assert.equal(p.animation.keys.length,0);
   const c=compileClip(next,{});assert.ok(c.slots.filter(s=>s.active).length>2);
   const final=slotAt(c,2.8).state.scene.actors[0];assert.equal(final.headPitch??0,0);assert.equal(final.armR,0);

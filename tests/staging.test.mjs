@@ -25,3 +25,10 @@ test('old projects stay valid; backdrop and grid settings survive backups and re
  for(const backdrop of ['bogus',{},null,['none']])assert.throws(()=>core.validateProject({...p,scene:{...p.scene,backdrop}}),/backdrop/i);
  for(const guides of [null,[],{ground:'yes'},{backdrop:1}])assert.throws(()=>core.validateProject({...p,guides}),/guide/i);
 });
+test('three-point framing preserves subjects and enables converging ground and vertical guides',()=>{
+ const p=core.newProject();p.scene.actors[0].yaw=17;p.scene.actors[1].z=.4;
+ const next=core.withFraming(p,'three-point');
+ assert.deepEqual(next.scene.actors,p.scene.actors);assert.deepEqual(next.lines,p.lines);
+ assert.deepEqual(next.guides,{ground:true,backdrop:true});assert.equal(next.scene.camera.azimuth,25);assert.equal(next.scene.camera.elevation,18);
+ assert.equal(p.guides?.ground||false,false);
+});

@@ -44,15 +44,17 @@ function adapt(source,name,texture){
  return group;
 }
 function grid(vertical=false){
- const vertices=[],line=(...points)=>vertices.push(...points);
+ const vertices=[],line=(...points)=>vertices.push(...points),rear=-3;
+ // Join the two reference planes behind the actors. Continuing the floor
+ // through the wall creates a dense crossing field that hides convergence.
  // Every floor line is finite and segmented, including cross lines; lines behind
  // the near plane cannot turn into full-screen streaks when orbiting the camera.
  for(let x=-15;x<=15;x+=.5){
-  if(vertical)line(x,0,-10,x,10,-10);
-  else for(let z=-40;z<15;z+=.5)line(x,.012,z,x,.012,z+.5);
+  if(vertical)line(x,0,rear,x,10,rear);
+  else for(let z=rear;z<15;z+=.5)line(x,.012,z,x,.012,z+.5);
  }
- if(vertical){for(let y=0;y<=10;y+=.5)line(-15,y,-10,15,y,-10);}
- else for(let z=-40;z<=15;z+=.5)for(let x=-15;x<15;x+=.5)line(x,.012,z,x+.5,.012,z);
+ if(vertical){for(let y=0;y<=10;y+=.5)line(-15,y,rear,15,y,rear);}
+ else for(let z=rear;z<=15;z+=.5)for(let x=-15;x<15;x+=.5)line(x,.012,z,x+.5,.012,z);
  const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));
  const material=new THREE.LineBasicMaterial({color:'#527fb5',transparent:true,opacity:.48,depthWrite:false});
  material.userData.outlineParameters={visible:false};return new THREE.LineSegments(geometry,material);

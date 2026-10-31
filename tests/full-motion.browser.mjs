@@ -1,0 +1,36 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import {chromium} from 'playwright';
+import {build} from 'esbuild';
+const harness=(await build({stdin:{contents:`export {Stage} from './app/src/stage.mjs';export {newProject} from './app/src/core.mjs';export {MOTION_PRESETS,addGesture,addWalk,applyMotion} from './app/src/motion.mjs';export {Vector3} from 'three';`,resolveDir:process.cwd()},bundle:true,format:'esm',write:false})).outputFiles[0].text;
+test('full motion renders recognizable poses, real effects, contact, book hinges and grounded walk',async()=>{
+ const browser=await chromium.launch({headless:true,args:['--no-sandbox','--use-gl=angle','--use-angle=swiftshader']});
+ try{const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.route('http://localhost:19882/**',async route=>{const path=new URL(route.request().url()).pathname;if(path==='/harness.mjs')return route.fulfill({contentType:'text/javascript',body:harness});if(path.startsWith('/assets/'))return route.fulfill({body:await fs.readFile(`app${path}`)});return route.fulfill({contentType:'text/html',body:'<canvas></canvas>'});});await page.goto('http://localhost:19882/');
+ const result=await page.evaluate(async()=>{
+  const {Stage,newProject,MOTION_PRESETS,addGesture,addWalk,applyMotion,Vector3}=await import('/harness.mjs'),stage=new Stage(document.querySelector('canvas')),sheets={},diagnostics={};
+  function base(two=false){const p=newProject();p.scene.count=two?2:1;p.scene.actors[0].model='v12';p.scene.actors[1].model='v12-beady';Object.assign(p.scene.actors[0],{x:two?-.45:0,yaw:0});Object.assign(p.scene.actors[1],{x:.45,yaw:0});Object.assign(p.scene.camera,{projection:'orthographic',zoom:.95,targetY:1,azimuth:15,elevation:7});p.animation={mode:'silent',duration:.5,drawings:3,keys:[]};p.lines=[];return p;}
+  async function draw(p,time){await stage.prepare(p.scene);const state={scene:structuredClone(p.scene),mouths:['rest','rest']};applyMotion(state,p,time);stage.draw(state,270,360,{guides:{ground:true}});return state;}
+  async function sheet(name,cases,cols){const c=document.createElement('canvas');c.width=cols*270;c.height=Math.ceil(cases.length/cols)*390;const ctx=c.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,c.width,c.height);for(let i=0;i<cases.length;i++){const [label,p,time]=cases[i];await draw(p,time);const x=i%cols*270,y=Math.floor(i/cols)*390;ctx.drawImage(stage.canvas,x,y+30);ctx.fillStyle='black';ctx.font='16px sans-serif';ctx.fillText(label,x+10,y+21);}sheets[name]=c.toDataURL().split(',')[1];}
+  try{
+   const gestures=['explain','shrug','point'];await sheet('gestures',gestures.flatMap(id=>{const p=addGesture(base(),'actor:0',id);return [0,.4,.65].map(t=>[`${id} ${t}`,p,t*MOTION_PRESETS[id].duration]);}),3);
+   const walk=addWalk(base(),'actor:0',0,{steps:4,stride:.25,direction:70});await sheet('walk',[0,.25,.5,.75,1,1.25,1.5,2.3].map(t=>[`walk ${t}s`,walk,t]),4);
+   await draw(walk,.5);diagnostics.footHeights=['L','R'].map(side=>stage.actors[0].bones[`foot${side}`].getWorldPosition(new Vector3()).y);
+   const special=['explode','flatten','nose_off','head_spin','big_head','ragdoll','open','turn','throw','goose_chase','high_five','handshake','nose_touch'];await sheet('special',special.map(id=>{const p=addGesture(base(MOTION_PRESETS[id].group==='Partner'),'actor:0',id);if(['explode','big_head'].includes(id))p.scene.camera.zoom=.7;return [id,p,MOTION_PRESETS[id].duration*.6];}),4);
+   for(const id of Object.keys(MOTION_PRESETS)){const p=addGesture(base(MOTION_PRESETS[id].group==='Partner'),'actor:0',id);await draw(p,MOTION_PRESETS[id].duration*.5);}
+   const pair=addGesture(base(true),'actor:0','handshake');await draw(pair,2.4*.4);const palms=()=>stage.actors.map((a,i)=>a.bones.handR.getWorldPosition(new Vector3()).add(new Vector3(Math.sin(stage.state.scene.actors[i].yaw*Math.PI/180),0,Math.cos(stage.state.scene.actors[i].yaw*Math.PI/180)).multiplyScalar(.055)));const hands=palms();diagnostics.handDistance=hands[0].distanceTo(hands[1]);
+   diagnostics.partnerModels={};for(const model of ['billy-v2','v12-fat','gooby']){const b=base(true);b.scene.actors[1].model=model;const q=addGesture(b,'actor:0','handshake');await draw(q,.96);diagnostics.partnerModels[model]={distance:palms()[0].distanceTo(palms()[1]),headY:stage.actors[1].bones.head.getWorldPosition(new Vector3()).y};}
+   for(const id of ['flatten','big_head','explode','nose_off','head_spin']){const p=addGesture(base(),'actor:0',id);await draw(p,MOTION_PRESETS[id].duration*.6);const a=stage.actors[0];diagnostics[id]={scale:a.root.scale.toArray(),head:a.bones.head.scale.toArray(),burst:a.root.getObjectByName('keyed-explosion').visible,nose:a.bones.nose?.position.toArray()};}
+   diagnostics.punch=[];for(const models of [['v12','v12'],['billy-v2','billy-v2'],['billy-v2','v12'],['v12','billy-v2']]){const b=base(true);b.scene.actors[0].model=models[0];b.scene.actors[1].model=models[1];const q=addGesture(b,'actor:0','punch');const state=await draw(q,2.4*.38),a=state.scene.actors[0];diagnostics.punch.push(stage.actors[0].bones.handR.getWorldPosition(new Vector3()).distanceTo(new Vector3(a.contactX,a.contactY,a.contactZ)));}
+   const noses=addGesture(base(true),'actor:0','nose_touch');await draw(noses,1.2);diagnostics.noseDistance=stage.actors[0].noseTip().distanceTo(stage.actors[1].noseTip());
+   const book=addGesture(base(),'actor:0','open');await draw(book,1.2);diagnostics.bookHinge=stage.props.items.values().next().value.dynamic.root.children[0].rotation.y;
+   const neutral=base();await draw(neutral,0);const first=stage.canvas.toDataURL();await draw(addGesture(base(),'actor:0','explode'),1);await draw(neutral,0);diagnostics.reset=first===stage.canvas.toDataURL();
+   // Legacy nose extraction must restore and must never mutate the shared asset.
+   const legacy=base();legacy.scene.actors[0].model='blue';await draw(legacy,0);const before=stage.canvas.toDataURL();await draw(addGesture(legacy,'actor:0','nose_off'),1);diagnostics.legacyNose=!!stage.actors[0].root.getObjectByName('detached-original-nose');await draw(legacy,0);diagnostics.legacyReset=before===stage.canvas.toDataURL();
+   return {sheets,diagnostics};
+  }finally{stage.dispose();}
+ });
+ for(const [name,png]of Object.entries(result.sheets))await fs.writeFile(`/tmp/full-motion-${name}.png`,Buffer.from(png,'base64'));
+ console.log(JSON.stringify(result.diagnostics));assert.deepEqual(errors,[]);for(const [name,data]of Object.entries(result.diagnostics.partnerModels))assert.ok(data.distance<.05,`${name} hands miss: ${data.distance}`);assert.ok(result.diagnostics.handDistance<.08,`hands miss: ${result.diagnostics.handDistance}`);assert.ok(result.diagnostics.footHeights.every(y=>y>-.02&&y<.3));assert.ok(result.diagnostics.flatten.scale[1]<.2);assert.ok(result.diagnostics.big_head.head[0]>2);assert.equal(result.diagnostics.explode.burst,true);assert.ok(Math.abs(result.diagnostics.bookHinge)>2);assert.ok(result.diagnostics.punch.every(d=>d<.06),`punch miss ${result.diagnostics.punch}`);assert.ok(result.diagnostics.noseDistance<.002);assert.equal(result.diagnostics.reset,true);assert.equal(result.diagnostics.legacyNose,true);assert.equal(result.diagnostics.legacyReset,true);
+ }finally{await browser.close();}
+});

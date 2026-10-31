@@ -28,12 +28,12 @@
     <label>Backdrop<select id="backdrop"></select></label>
     <fieldset class="reference-guides"><legend>Reference grids</legend><label class="check"><input id="ground-grid" type="checkbox"> Ground</label><label class="check"><input id="backdrop-grid" type="checkbox"> Backdrop</label></fieldset>
     <div class="subheading"><h3>Camera</h3><button id="reset-camera">Reset</button></div>
-    <div class="preset-row"><button data-framing="duet">Two shot</button><button data-framing="solo">Solo</button><button data-framing="close">Close-up</button><button data-framing="wide">Wide</button><button data-framing="ots-left">Over A</button><button data-framing="ots-right">Over B</button></div>
+    <div class="preset-row"><button data-framing="duet">Two shot</button><button data-framing="solo">Solo</button><button data-framing="close">Close-up</button><button data-framing="wide">Wide</button><button data-framing="ots-left">Over A</button><button data-framing="ots-right">Over B</button><button data-framing="three-point">Three-point</button></div>
     <label>Projection<select id="projection"><option value="orthographic">Orthographic</option><option value="perspective">Perspective</option></select></label>
     <div id="camera-fields" class="sliders"></div>
     <h3 class="rule-heading">Characters</h3><div id="actor-fields"></div>
     <details id="objects"><summary>Objects</summary>
-     <div class="field-pair"><label>Add object<select id="prop-kind"><option value="book">Goosnav book</option><option value="cube">Cube</option><option value="prism">Prism</option><option value="sphere">Sphere</option></select></label><button id="add-prop">Add</button></div>
+     <div class="field-pair"><label>Add object<select id="prop-kind"><option value="book">Goosnav book</option><option value="cube">Cube</option><option value="prism">Prism</option><option value="sphere">Sphere</option><option value="goose">Goose</option></select></label><button id="add-prop">Add</button></div>
      <div id="prop-editor" hidden><div class="field-pair"><label>Object<select id="prop-select"></select></label><button id="remove-prop">Remove</button></div><label>Attach to<select id="prop-attachment"></select></label><div id="prop-fields"></div><label>Color<input id="prop-color" type="color"></label></div>
     </details>
    </section>
@@ -52,7 +52,17 @@
      <label class="sr-only" for="animation-scrub">Animation playhead</label><input id="animation-scrub" type="range" min="0" max="5" step=".041667" value="0">
      <div class="field-pair"><label>Time (s)<input id="key-time" type="number" min="0" max="120" step=".041667" value="0"></label><label>Animate<select id="motion-target"></select></label></div>
      <div id="key-list" class="key-list" aria-label="Keyframes"></div>
-     <div class="field-pair"><label>Action<select id="gesture-preset"></select></label><button id="add-gesture">Add action</button></div>
+     <div class="action-insert">
+      <label>Action<select id="gesture-preset"></select></label>
+      <div class="field-pair"><label>Action duration (s)<input id="action-duration" type="number" min=".2" max="12" step=".1" value=".9"></label><label>Strength<input id="action-strength" type="number" min=".5" max="2" step=".1" value="1"></label></div>
+      <button id="add-gesture" class="wide">Add action</button>
+     </div>
+     <details id="walking"><summary>Walking</summary>
+      <div class="field-pair"><label>Steps<input id="walk-steps" type="number" min="1" max="12" step="1" value="4"></label><label>Step length (m)<input id="walk-stride" type="number" min=".1" max="1" step=".05" value=".25"></label></div>
+      <div class="field-pair"><label>Steps / second<input id="walk-cadence" type="number" min=".5" max="4" step=".25" value="2"></label><label>Direction (°)<input id="walk-direction" type="number" min="-180" max="180" step="5" value="60"></label></div>
+      <label class="check"><input id="walk-in-place" type="checkbox"> Walk in place</label>
+      <button id="add-walk" class="wide">Add walk</button>
+     </details>
      <div class="field-pair"><label>Arrive with<select id="key-transition"><option value="auto">Auto</option><option value="ease">Ease</option><option value="hold">Hold / cut</option><option value="wipe">Wipe</option></select></label><label>Drawings per move<select id="motion-drawings"><option value="3">3 · economical</option><option value="5">5</option><option value="9">9 · smoother</option></select></label></div>
      <label id="key-position-label" hidden>Key time (s)<input id="key-position" type="number" min="0" max="120" step=".041667"></label><div id="motion-fields"></div>
      <div class="button-list key-actions"><button id="set-key" class="primary">Set keyframe</button><button id="remove-key">Remove keyframe</button><button id="discard-pose" hidden>Discard pose</button></div>
