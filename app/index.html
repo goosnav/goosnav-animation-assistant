@@ -56,6 +56,7 @@
       <label>Action<select id="gesture-preset"></select></label>
       <div class="field-pair"><label>Action duration (s)<input id="action-duration" type="number" min=".2" max="12" step=".1" value=".9"></label><label>Strength<input id="action-strength" type="number" min=".5" max="2" step=".1" value="1"></label></div>
       <button id="add-gesture" class="wide">Add action</button>
+      <div id="pending-action" hidden><p id="pending-action-label" class="hint" role="status"></p><button id="discard-action">Discard selected action</button></div>
      </div>
      <details id="walking"><summary>Walking</summary>
       <div class="field-pair"><label>Steps<input id="walk-steps" type="number" min="1" max="12" step="1" value="4"></label><label>Step length (m)<input id="walk-stride" type="number" min=".1" max="1" step=".05" value=".25"></label></div>
@@ -70,6 +71,7 @@
    </section>
    <section data-view="draw" hidden>
     <h2>Drawings</h2>
+    <p id="reference-plan" class="hint" role="status"></p>
     <div class="drawing-actions"><button id="drawing-video" class="primary">Create references</button><label class="file-button">Upload drawings<input id="import-artwork" type="file" accept="video/mp4,video/quicktime,.mp4,.mov,.m4v,image/png,image/jpeg,image/webp" multiple></label></div>
     <p id="transfer-summary" class="hint" hidden></p>
     <div id="drawing-video-result" hidden><div class="button-list"><button id="share-drawing-video" class="primary">Save to Photos</button><button id="download-drawing-video">Download MP4</button></div><p id="drawing-video-info" class="hint"></p></div>

@@ -14,27 +14,36 @@ export class AnimationEditor{
   $('#timing-mode').onchange=e=>{const p=copy(project()),a=animationSettings(p);p.animation={...a,mode:e.target.value,duration:e.target.value==='silent'?Math.min(120,Math.max(5,...a.keys.map(k=>k.time+1/24))):0};p.audioMode=e.target.value==='silent'?'silent':'robot';this.commit(p);};
   $('#clip-length').onchange=e=>{const p=copy(project()),a=animationSettings(p),duration=Number(e.target.value),last=Math.max(0,...a.keys.map(k=>k.time));if(duration<last){error(`The last key is at ${last.toFixed(2)} s. Move or remove later keys before shortening the clip.`);this.refresh();return;}p.animation={...a,duration};this.commit(p);};
   $('#motion-drawings').onchange=e=>{const p=copy(project());p.animation={...animationSettings(p),drawings:Number(e.target.value)};this.commit(p);};
-  $('#motion-target').onchange=e=>{const next=e.target.value;if(this.dirty&&!this.setKey()){$('#motion-target').value=this.target;return;}this.target=next;this.resetDraft();this.refresh();preview();};
-  const scrub=e=>{const value=Number(e.target.value);if(!Number.isFinite(value)||Math.abs(value-time())<1e-7)return;if(this.dirty&&!this.setKey())return;this.resetDraft();seek(value);this.refreshFields();};
+  $('#motion-target').onchange=e=>{const next=e.target.value;if(!this.finishEdits()){$('#motion-target').value=this.target;return;}this.target=next;this.resetDraft();this.refresh();preview();};
+  const scrub=e=>{const value=Number(e.target.value);if(!Number.isFinite(value)||Math.abs(value-time())<1e-7)return;if(!this.finishEdits())return;this.resetDraft();seek(value);this.refreshFields();};
   $('#animation-scrub').oninput=scrub;$('#key-time').onchange=scrub;
-  $('#key-list').onclick=e=>{const button=e.target.closest('[data-key-id]');if(!button)return;if(this.dirty&&!this.setKey())return;const key=animationSettings(project()).keys.find(k=>k.id===button.dataset.keyId);if(!key)return;this.selected=key.id;this.target=key.target;this.draft={...targetValues(project().scene,key.target),...key.values};this.dirty=false;$('#key-transition').value=key.transition;seek(key.time);this.refresh();preview();};
-  $('#speech-beats').onclick=e=>{const button=e.target.closest('[data-beat-time]');if(button){if(this.dirty&&!this.setKey())return;this.resetDraft();seek(Number(button.dataset.beatTime));this.refreshFields();}};
+  $('#key-list').onclick=e=>{const button=e.target.closest('[data-key-id]');if(!button)return;if(!this.finishEdits())return;const key=animationSettings(project()).keys.find(k=>k.id===button.dataset.keyId);if(!key)return;this.selected=key.id;this.target=key.target;this.draft={...targetValues(project().scene,key.target),...key.values};this.dirty=false;$('#key-transition').value=key.transition;seek(key.time);this.refresh();preview();};
+  $('#speech-beats').onclick=e=>{const button=e.target.closest('[data-beat-time]');if(button){if(!this.finishEdits())return;this.resetDraft();seek(Number(button.dataset.beatTime));this.refreshFields();}};
   $('#motion-fields').oninput=e=>{const key=e.target.dataset.motionChannel||e.target.dataset.motionRange;if(!key)return;const channel=this.channels()[key],value=Number(e.target.value);if(e.target.value===''||!Number.isFinite(value)||value<channel.min||value>channel.max)return;this.draft??=this.values();this.draft[key]=value;if(this.target.startsWith('actor:')){if(['x','y','z','yaw','headYaw','headPitch','headTilt'].includes(key))this.draft.noseContact=0;if(/^(thigh|knee|foot)[LR]$/.test(key))this.draft.footIK=0;if(['armL','armSideL','elbowL','handL'].includes(key))this.draft.contactLeft=0;if(['armR','armSideR','elbowR','handR'].includes(key)){this.draft.contact=0;if('noseGrip' in this.draft)this.draft.noseGrip=0;}}const paired=$(e.target.type==='range'?`[data-motion-channel="${key}"]`:`[data-motion-range="${key}"]`);if(paired)paired.value=value;this.dirty=true;this.draftUI();preview();};
   $('#key-transition').onchange=()=>{if(this.selected){this.dirty=true;this.draft??=this.values();this.draftUI();}};
   $('#set-key').onclick=()=>this.setKey();
   $('#key-position').onchange=e=>{const p=copy(project()),a=copy(animationSettings(p)),key=a.keys.find(k=>k.id===this.selected);if(!key)return;if(this.dirty){key.values={...this.values(),...this.draft};key.transition=$('#key-transition').value;}key.time=Math.round(Number(e.target.value)*p.fps)/p.fps;p.animation=a;try{this.change(p);seek(key.time);this.draft=null;this.dirty=false;this.refresh();}catch(e){error(e.message);this.refresh();}};
   $('#remove-key').onclick=()=>{const p=copy(project());p.animation={...animationSettings(p),keys:animationSettings(p).keys.filter(k=>k.id!==this.selected)};this.resetDraft();this.commit(p);};
   $('#discard-pose').onclick=()=>{this.resetDraft();this.refresh();preview();};
-  $('#gesture-preset').onchange=()=>this.actionDefaults();
-  $('#add-gesture').onclick=()=>{
-   if(this.dirty&&!this.setKey())return;
-   try{const next=addGesture(project(),this.target,$('#gesture-preset').value,time(),{duration:Number($('#action-duration').value),strength:Number($('#action-strength').value)});this.resetDraft();this.commit(next);}catch(e){error(e.message);}
-  };
+  $('#gesture-preset').onchange=()=>{this.actionDefaults();this.queueAction();};
+  for(const id of ['action-duration','action-strength'])$('#'+id).oninput=()=>this.queueAction();
+  $('#add-gesture').onclick=()=>this.addAction();
+  $('#discard-action').onclick=()=>this.clearAction();
   $('#add-walk').onclick=()=>{
-   if(this.dirty&&!this.setKey())return;
+   if(!this.finishEdits())return;
    try{const next=addWalk(project(),this.target,time(),{steps:Number($('#walk-steps').value),stride:Number($('#walk-stride').value),cadence:Number($('#walk-cadence').value),direction:Number($('#walk-direction').value),inPlace:$('#walk-in-place').checked});this.resetDraft();this.commit(next);}catch(e){error(e.message);}
   };
  }
+ queueAction(){this.pendingAction??={target:this.target,time:this.time()};$('#pending-action').hidden=false;$('#pending-action-label').textContent=`${MOTION_PRESETS[$('#gesture-preset').value].label} selected at ${this.pendingAction.time.toFixed(2)} s. Add it now, or continue to generate the whole motion automatically.`;}
+ clearAction(){this.pendingAction=null;$('#pending-action').hidden=true;}
+ addAction(){
+  if(this.dirty&&!this.setKey())return false;
+  try{
+   const next=addGesture(this.project(),this.pendingAction?.target??this.target,$('#gesture-preset').value,this.pendingAction?.time??this.time(),{duration:Number($('#action-duration').value),strength:Number($('#action-strength').value)});
+   this.change(next);this.clearAction();this.resetDraft();this.refresh();return true;
+  }catch(e){this.error(e.message);return false;}
+ }
+ finishEdits(){if(this.pendingAction&&!this.addAction())return false;return !this.dirty||this.setKey();}
  actionDefaults(){const action=MOTION_PRESETS[$('#gesture-preset').value];if(action)$('#action-duration').value=action.duration;this.actionAvailability();}
  actionAvailability(){const group=MOTION_PRESETS[$('#gesture-preset').value]?.group;$('#add-gesture').disabled=!this.target.startsWith('actor:')||group==='Partner'&&this.project().scene.count<2;$('#action-strength').closest('label').hidden=['Book','Partner'].includes(group);$('#action-strength').disabled=!this.target.startsWith('actor:')||['Book','Partner'].includes(group);}
  channels(){return this.target.startsWith('actor:')?ACTOR_CHANNELS:PROP_CHANNELS;}

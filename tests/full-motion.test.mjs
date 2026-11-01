@@ -6,7 +6,7 @@ const actions=['open','turn','hold','read','place','close','slam','throw','punch
 const gestures=['none','explain','nod','head_tilt','shrug','page_glance','cry','arm_flail','fist_shake','double_point','despair','windmill','rubber_hose','snap_pose','point','offer'];
 function project(){const p=newProject();p.scene.count=2;p.lines=[];p.animation={mode:'silent',duration:.5,drawings:3,keys:[]};return p;}
 test('every source action and gesture creates validated, finite editable drawings',()=>{
- for(const id of [...actions,...gestures]){assert.ok(motion.MOTION_PRESETS[id],id);const p=motion.addGesture(project(),'actor:0',id);validateProject(p);assert.ok(p.animation.keys.length>=2,id);const c=compileClip(p,{});assert.ok(c.slots.filter(s=>s.active).length<=100,`${id} exceeds reference limit`);assert.ok(motion.MOTION_PRESETS[id].group,id);}
+ for(const id of new Set([...actions,...gestures,...Object.keys(motion.MOTION_PRESETS)])){assert.ok(motion.MOTION_PRESETS[id],id);const p=motion.addGesture(project(),'actor:0',id);validateProject(p);assert.ok(p.animation.keys.length>=2,id);const c=compileClip(p,{});const drawings=c.slots.filter(s=>s.active);assert.ok(drawings.length<=100,`${id} exceeds reference limit`);assert.ok(drawings.length>=(id==='none'?1:3),`${id} must generate distinct motion drawings`);assert.ok(motion.MOTION_PRESETS[id].group,id);}
 });
 test('controlled walk travels requested distance, cycles opposite arms and legs, settles and preserves caller',()=>{
  assert.equal(typeof motion.addWalk,'function');const p=project(),original=JSON.stringify(p);const q=motion.addWalk(p,'actor:0',0,{steps:4,stride:.3,cadence:2,direction:90});validateProject(q);assert.equal(JSON.stringify(p),original);const keys=q.animation.keys,last=keys.at(-1).values;assert.ok(Math.abs(last.x-p.scene.actors[0].x-1.2)<1e-5);assert.equal(last.thighL,0);assert.equal(last.kneeL,0);assert.ok(keys.some(k=>k.values.thighL*k.values.thighR<0));assert.ok(keys.some(k=>k.values.armL*k.values.thighL<0));const inPlace=motion.addWalk(p,'actor:0',0,{steps:4,stride:.3,cadence:2,direction:0,inPlace:true});assert.equal(inPlace.animation.keys.at(-1).values.z,p.scene.actors[0].z);assert.throws(()=>motion.addWalk(p,'actor:0',119,{steps:4}));assert.equal(JSON.stringify(p),original);
@@ -36,4 +36,16 @@ test('book actions preserve attached prop history and reject release atomically'
  const p=project();p.scene.props=[{id:'held',kind:'book',color:'#ffffff',attachment:'actor:0:right',x:.1,y:.1,z:.05,rx:0,ry:0,rz:0,width:.3,height:.4,depth:.05}];p.animation.keys=[{id:'prior',target:'prop:held',time:.5,transition:'ease',values:{y:.2}}];const before=JSON.stringify(p);
  for(const action of ['open','turn','hold','read','close','slam']){const q=motion.addGesture(p,'actor:0',action,2);assert.deepEqual(q.scene.props,p.scene.props);assert.deepEqual(q.animation.keys.find(k=>k.id==='prior'),p.animation.keys[0]);for(const t of [0,.5,1]){const a={scene:structuredClone(p.scene)},b={scene:structuredClone(q.scene)};motion.applyMotion(a,p,t);motion.applyMotion(b,q,t);assert.deepEqual(b.scene.props,a.scene.props);}}
  for(const action of ['place','throw'])assert.throws(()=>motion.addGesture(p,'actor:0',action,2),/World/);assert.equal(JSON.stringify(p),before);
+});
+
+// A full flail must expose every alternating extreme and its in-betweens.
+test('arm flail covers both arm extremes, intermediate poses and the return to rest at every drawing quality',()=>{
+ for(const quality of [3,5,9]){
+  const p=project();p.animation.drawings=quality;const next=motion.addGesture(p,'actor:0','arm_flail');
+  const clip=compileClip(next,{}),poses=clip.slots.filter(s=>s.active).map(s=>s.state.scene.actors[0]);
+  for(const [left,right] of [[0,0],[150,-50],[-55,145],[120,30],[-40,130]])assert.ok(poses.some(a=>a.armL===left&&a.armR===right),`quality ${quality} omits flail extreme ${left}/${right}`);
+  assert.ok(poses.some(a=>a.armL>0&&a.armL<150&&a.armR<0&&a.armR>-50),'the first swing needs an automatically generated in-between');
+  const last=clip.slots.find(s=>s.id===clip.exposures.at(-1).slotId).state.scene.actors[0];assert.equal(last.armL,0);assert.equal(last.armR,0);
+  let end=0;for(const exposure of clip.exposures){assert.equal(exposure.startFrame,end);assert.ok(exposure.endFrame>end);end=exposure.endFrame;}assert.equal(end,clip.totalFrames);
+ }
 });
