@@ -6,6 +6,9 @@ import { OutlineEffect } from 'three/addons/effects/OutlineEffect.js';
 import { Scenery } from './scenery.mjs';
 import { Props } from './props.mjs';
 import { actorEffects,reach } from './rig-actions.mjs';
+import {bodyPoses} from './body-poses.mjs';
+import {EMOTIONS} from './emotions.mjs';
+import {Seating} from './seating.mjs';
 
 const rad=THREE.MathUtils.degToRad;
 const turnDistance=(from,to)=>Math.abs(THREE.MathUtils.euclideanModulo(to-from+180,360)-180);
@@ -42,8 +45,9 @@ function actor(source,name=''){
  const teeth=new THREE.Mesh(new THREE.BoxGeometry(.105,.017,.022),new THREE.MeshToonMaterial({color:0xffffff,fog:false}));
  teeth.position.set(0,headPosition.y+.028,.151);root.add(teeth);root.updateMatrixWorld(true);head.attach(teeth);teeth.visible=false;
  const effects=actorEffects(root,bones);
+ const contacts=bodyPoses(root,bones);
  function pose(name,x=0,y=0,z=0){if(bones[name])bones[name].quaternion.copy(rest[name].q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(x,y,z)));}
- return {root,bones,noseTip:effects.noseTip,apply(a,mouth='rest',blink=false,style='flat',smearFrom=null){
+ return {root,bones,noseTip:effects.noseTip,get seat(){return contacts.seat;},apply(a,mouth='rest',blink=false,style='flat',smearFrom=null){
   for(const [n,b]of Object.entries(bones)){b.quaternion.copy(rest[n].q);b.position.copy(rest[n].p);b.scale.copy(rest[n].s);}
   root.position.set(a.x,a.y||0,a.z);root.rotation.set(rad(a.rootPitch||0),rad(a.yaw),rad(a.rootRoll||0));root.scale.set(a.scale*(1+.8*(a.flatten||0)),a.scale*(1-.94*(a.flatten||0)),a.scale*(1+.55*(a.flatten||0)));
   root.updateMatrixWorld(true);
@@ -55,19 +59,22 @@ function actor(source,name=''){
   if(a.pose==='point'){right=[1.1,0,-.12];fr=[.2,0,0];}
   if(a.pose==='open-hand'){right=[.73,0,-.24];fr=[.75,0,0];}
   if(a.pose==='shrug'){left=[.3,0,.32];right=[.3,0,-.32];fl=[.9,0,0];fr=[.9,0,0];}
-  if(a.pose==='hands-on-hips'){left=[.05,0,.35];right=[.05,0,-.35];fl=[1.4,0,.25];fr=[1.4,0,-.25];}
+  if(a.pose==='hands-on-hips'){left=[0,0,.85];right=[0,0,-.85];fl=[0,0,-1.7];fr=[0,0,1.7];}
+  if(a.pose==='sitting'){left=[.35,0,.2];right=[.35,0,-.2];fl=[1.4,0,0];fr=[1.4,0,0];}
   left[0]+=rad(a.armL||0);right[0]+=rad(a.armR||0);
   left[2]+=rad(a.armSideL||0);right[2]+=rad(a.armSideR||0);fl[0]+=rad(a.elbowL||0);fr[0]+=rad(a.elbowR||0);
-  pose('spine',rad(a.bodyLean||0),rad(a.bodyTurn||0),0);
+  const emotion=EMOTIONS[a.emotion]||EMOTIONS.neutral;
+  pose('spine',rad((a.bodyLean||0)+emotion.bodyLean),rad(a.bodyTurn||0),0);
   left[2]+=armClear[name]||0;right[2]-=armClear[name]||0;
   pose('upper_armL',...left);pose('upper_armR',...right);pose('forearmL',...fl);pose('forearmR',...fr);
   pose('handL',0,rad(a.handL),0);pose('handR',0,rad(a.handR),0);
-  for(const side of ['L','R']){pose(`thigh${side}`,rad(a[`thigh${side}`]||0));pose(`shin${side}`,rad(a[`knee${side}`]||0));pose(`foot${side}`,rad(a[`foot${side}`]||0));}
-  pose('head',(baked.length?-(headLift[mouth]||0):0)+rad(a.headPitch||0),rad((a.headYaw||0)+(a.headSpin||0)),rad(a.headTilt||0));
+  for(const side of ['L','R']){pose(`thigh${side}`,rad((a.pose==='sitting'?90:0)+(a[`thigh${side}`]||0)));pose(`shin${side}`,rad((a.pose==='sitting'?-90:0)+(a[`knee${side}`]||0)));pose(`foot${side}`,rad(a[`foot${side}`]||0));}
+  pose('head',(baked.length?-(headLift[mouth]||0):0)+rad((a.headPitch||0)+emotion.headPitch),rad((a.headYaw||0)+(a.headSpin||0)),rad((a.headTilt||0)+emotion.headTilt));
   bones.head.scale.multiplyScalar(a.headScale??1);for(const side of ['L','R'])bones[`hand${side}`]?.scale.multiplyScalar(a.handScale??1);
   for(const side of ['L','R'])for(const digit of ['f11','f12','f21','f22','f31','f32','thumb1','thumb2']){const curl=Math.max(a[`fingerCurl${side}`]||0,digit.startsWith('f1')?0:a[`fingerPoint${side}`]||0);pose(`${digit}${side}`,curl*1.35);}
   effects.apply(a);
-  if(a.footIK)for(const side of ['L','R']){
+  contacts.settle(a,restFeet);contacts.hands(a);
+  if(a.footIK&&a.pose!=='sitting')for(const side of ['L','R']){
    const end=bones[`foot${side}`],target=restFeet[side];if(!target)continue;target.add(new THREE.Vector3(Math.sin(rad(a.yaw)),0,Math.cos(rad(a.yaw))).multiplyScalar(a[`footForward${side}`]||0));target.y+=(a.groundY||0)-(a.y||0)+(a[`footLift${side}`]||0);
    const flat=restFootRotations[side];reach(root,[bones[`thigh${side}`],bones[`shin${side}`]],end,target,a.footIK,64);end.quaternion.copy(end.parent.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(flat));
   }
@@ -92,8 +99,10 @@ function actor(source,name=''){
   teeth.visible=mouth==='teeth'&&!baked.length;   // v12 F/V tucks the lip instead
   for(const {mat,color}of materials)mat.color.copy(style==='line'&&!/mouth|eye_black|eye_gloss|pupil|glasses/.test(mat.name)?new THREE.Color('white'):color);
   if(smearFrom){
+   const targetPosition=root.position.clone(),targetSeat=contacts.seat;
    const target=Object.fromEntries(Object.entries(bones).map(([n,b])=>[n,{q:b.quaternion.clone(),p:b.position.clone()}]));
    this.apply(smearFrom,mouth,blink,style);
+   root.position.lerp(targetPosition,.5);contacts.seat=targetSeat||contacts.seat;
    for(const [n,b]of Object.entries(bones)){
     const delta=b.quaternion.clone().invert().multiply(target[n].q),angle=b.quaternion.angleTo(target[n].q);
     b.quaternion.slerp(target[n].q,.5);b.position.lerp(target[n].p,.5);
@@ -109,6 +118,7 @@ function actor(source,name=''){
     }
    }
   }
+  if(contacts.seat)contacts.seat.rootY=root.position.y;
  },dispose(){effects.dispose();root.traverse(o=>{if(o.isMesh){for(const m of Array.isArray(o.material)?o.material:[o.material])m.dispose();}});teeth.geometry.dispose();}};
 }
 
@@ -117,7 +127,7 @@ export class Stage {
   this.canvas=canvas;this.renderer=new THREE.WebGLRenderer({canvas,antialias:true,preserveDrawingBuffer:true,alpha:false});
   this.renderer.setPixelRatio(1);this.renderer.outputColorSpace=THREE.SRGBColorSpace;
   this.effect=new OutlineEffect(this.renderer);this.scene=new THREE.Scene();this.scene.add(new THREE.AmbientLight(0xffffff,2));
-  this.scenery=new Scenery(this.scene);this.props=new Props(this.scene);
+  this.scenery=new Scenery(this.scene);this.props=new Props(this.scene);this.seating=new Seating(this.scene);
   const sun=new THREE.DirectionalLight(0xffffff,2.1);sun.position.set(-3,5,6);this.scene.add(sun);
   this.actors=[];this.names=[];this.camera=new THREE.OrthographicCamera();this.camera.position.set(0,1,6);
   this.controls=new OrbitControls(this.camera,canvas);this.controls.enableDamping=false;this.controls.target.set(0,1,0);this.controls.enablePan=true;
@@ -130,7 +140,7 @@ export class Stage {
  async prepare(scene){
   const ticket=this.prepareTicket=(this.prepareTicket||0)+1;
   const names=scene.actors.slice(0,scene.count).map(a=>a.model);
-  const [sources]=await Promise.all([Promise.all(names.map(load)),this.scenery.prepare(scene),this.props.prepare(scene.props)]);if(ticket!==this.prepareTicket)return;
+  const [sources]=await Promise.all([Promise.all(names.map(load)),this.scenery.prepare(scene),this.props.prepare(scene.props),this.seating.prepare(scene)]);if(ticket!==this.prepareTicket)return;
   this.props.detach();
   for(let i=0;i<2;i++)if(this.names[i]!==names[i]){if(this.actors[i]){this.scene.remove(this.actors[i].root);this.actors[i].dispose();}this.actors[i]=sources[i]?actor(sources[i],names[i]):null;this.names[i]=names[i];if(this.actors[i])this.scene.add(this.actors[i].root);}
  }
@@ -144,7 +154,7 @@ export class Stage {
     const from=new THREE.Vector3(wipe.from.x??a.x,wipe.from.y??a.y??0,wipe.from.z??a.z),to=new THREE.Vector3(wipe.to.x??a.x,wipe.to.y??a.y??0,wipe.to.z??a.z),delta=to.sub(from);
     // Endpoint sampling above resets the root; restore the compiled midpoint
     // rotation/scale before applying this drawing's temporary stretch.
-    actor.root.position.copy(from.addScaledVector(delta,.5));actor.root.rotation.y=rad(a.yaw);actor.root.scale.setScalar(a.scale);
+    actor.root.rotation.y=rad(a.yaw);actor.root.scale.setScalar(a.scale);
     delta.applyAxisAngle(new THREE.Vector3(0,1,0),-rad(a.yaw));actor.root.scale.x*=1+Math.min(2,Math.abs(delta.x)/.45);actor.root.scale.z*=1+Math.min(2,Math.abs(delta.z)/.4);actor.root.scale.y*=1+Math.min(1,Math.abs(delta.y)/1.7);
     actor.root.scale.x*=1+Math.min(.8,turnDistance(wipe.from.yaw??a.yaw,wipe.to.yaw??a.yaw)/180);
    }
@@ -152,7 +162,7 @@ export class Stage {
   if(state.scene.count===2&&state.scene.actors.every(a=>a.noseContact)){
    this.scene.updateMatrixWorld(true);const tips=this.actors.map(a=>a.noseTip()),weight=Math.min(...state.scene.actors.map(a=>a.noseContact)),delta=tips[1].sub(tips[0]).multiplyScalar(weight*.5);this.actors[0].root.position.add(delta);this.actors[1].root.position.sub(delta);
   }
-  this.scene.updateMatrixWorld(true);this.props.update(state.scene.props,this.actors,state.motionWipes,state.scene.style);
+  this.scene.updateMatrixWorld(true);this.props.update(state.scene.props,this.actors,state.motionWipes,state.scene.style);this.seating.update(state.scene,this.actors);
   const c=state.scene.camera,aspect=width/height;
   const next=c.projection==='perspective'?new THREE.PerspectiveCamera(35,aspect,.01,1000):new THREE.OrthographicCamera(-1.35*aspect,1.35*aspect,1.35,-1.35,.01,1000);
   next.zoom=c.projection==='orthographic'?c.zoom:1;
@@ -162,5 +172,5 @@ export class Stage {
  }
  render(){this.effect.render(this.scene,this.camera);}
  async png(){return new Promise((resolve,reject)=>this.canvas.toBlob(b=>b?resolve(b):reject(Error('Image rendering failed')),'image/png'));}
- dispose(){this.controls.dispose();this.props.dispose();this.actors.forEach(a=>a?.dispose());this.scenery.dispose();this.renderer.dispose();}
+ dispose(){this.controls.dispose();this.props.dispose();this.seating.dispose();this.actors.forEach(a=>a?.dispose());this.scenery.dispose();this.renderer.dispose();}
 }

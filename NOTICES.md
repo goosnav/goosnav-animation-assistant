@@ -29,4 +29,9 @@ https://github.com/Vanilagy/mediabunny ; exact installed versions are locked in
 package-lock.json. Build tools copy dependency license texts into vendor/.
 
 Character and book artwork is not open-licensed by inclusion in this tool.
+The folding chair, wooden chair, and stool are Goosnav assets from
+`goosnav-3D-assets` commit `436a2f985f1c0a975160c97b8a23ba2c90567ba2`.
+Editable Blender sources, GLB exports, rebuild script, and previews live in that
+repository's `props/seating`, `exports`, `scripts/build_seating.py`, and
+`previews/seating`. Their runtime hashes are recorded in the app asset manifest.
 The book PDFs are development references and are not shipped in the web build.

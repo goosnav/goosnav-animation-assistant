@@ -1,11 +1,13 @@
 import {ACTOR_CHANNELS,animationSettings,applyMotion,validateAnimation,validateProps,validateMotionWipes} from './motion.mjs';
+import {EMOTIONS} from './emotions.mjs';
 export const MOUTHS = ['rest', 'small', 'open', 'wide', 'round', 'teeth'];
 export const MODELS = ['blue', 'blue-beady', 'rust', 'rust-beady', 'olive', 'olive-beady', 'billy', 'gooby',
   'v12', 'v12-beady', 'v12-fat', 'v12-fat-glasses', 'billy-v2'];
 // Display names; models without one use their ID. The v12 people come from goosnav-3D-assets.
 export const MODEL_LABELS = { 'v12': 'Guy v12', 'v12-beady': 'Guy v12 (beady)', 'v12-fat': 'Fat guy (v12)',
   'v12-fat-glasses': 'Fat guy with glasses (v12)', 'billy-v2': 'Little Billy v2' };
-export const POSES = ['stand', 'point', 'shrug', 'open-hand', 'hands-on-hips'];
+export const POSES = ['stand', 'point', 'shrug', 'open-hand', 'hands-on-hips', 'sitting'];
+export const CHAIRS = {folding:'Folding metal chair',wood:'Wooden chair',stool:'Wooden stool'};
 export const BACKDROPS = {
   none: {label:'Plain',sky:'#ffffff'},
   'black-pyramids': {label:'Black pyramids',sky:'#e8b897'},
@@ -60,6 +62,8 @@ export function validateProject(p) {
   for(const [k,min,max] of [['azimuth',-180,180],['elevation',-45,75],['zoom',.4,3],['targetX',-3,3],['targetY',0,3]]) finite(p.scene.camera[k],min,max,`camera ${k}`);
   for (const a of p.scene.actors) {
     if (!MODELS.includes(a.model)||!POSES.includes(a.pose)) throw Error('Invalid character or pose');
+    if(a.chair!==undefined&&!Object.hasOwn(CHAIRS,a.chair))throw Error('Invalid character chair');
+    if(a.emotion!==undefined&&!Object.hasOwn(EMOTIONS,a.emotion))throw Error('Invalid character emotion');
     const required=['x','z','yaw','scale','headYaw','headTilt','armL','armR','handL','handR','nose'];
     for(const [k,d] of Object.entries(ACTOR_CHANNELS))if(required.includes(k)||a[k]!==undefined)finite(a[k],d.min,d.max,k);
   }
@@ -71,6 +75,7 @@ export function validateProject(p) {
     if (![0,1].includes(l.actor)||l.actor>=p.scene.count||typeof l.text!=='string'||l.text.length>1000||l.text.includes('\0')) throw Error('Invalid dialogue');
     finite(l.rate,.5,2,'line rate');finite(l.pause,0,10,'pause');
     if (l.pose!=='keep'&&!POSES.includes(l.pose)) throw Error('Invalid line pose');
+    if(l.emotion!==undefined&&!Object.hasOwn(EMOTIONS,l.emotion))throw Error('Invalid line emotion');
     finite(l.headYaw??0,-75,75,'line head turn');
     if(l.smear!==undefined&&typeof l.smear!=='boolean')throw Error('Invalid smear option');
   }
@@ -147,6 +152,7 @@ export function compileClip(project, takes = {}, previous = []) {
       const age=t-line.start, phone=line.take.phones.find(p=>age>=p.start&&age<p.end);
       state.mouths[line.actor]=phone?phoneMouth(phone.phone):'rest';
       const a=state.scene.actors[line.actor];if(line.pose!=='keep')a.pose=line.pose;
+      if(line.emotion!==undefined)a.emotion=line.emotion;
       a.headYaw=Math.max(-75,Math.min(75,a.headYaw+(line.headYaw??0)));
     }
     for(const blink of blinks)if(t>=blink.start&&t<blink.end)state.blinks[blink.actor]=true;

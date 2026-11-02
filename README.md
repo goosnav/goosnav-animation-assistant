@@ -19,6 +19,10 @@ lip shapes and tongue, and the head tips back a little as the mouth opens. Their
 
 ## Staging and drawing guides
 
+**Held pose → Hands on hips** places the palms against the waist with elbows out. **Sitting** bends the legs, plants the feet, and rests the hands on the lap. Choose a **folding metal chair**, **wooden chair**, or **wooden stool** under **Chair when sitting**. The chair fits the character and appears automatically in previews and reference exports whenever that character sits. Arm actions can lift the hands from the resting pose.
+
+**Expression** sets a character's head/body attitude; individual dialogue lines can override it while speaking. Speech continues to control the mouth shapes.
+
 New two-character scenes stand at **−0.45 / +0.45** and face inward at **+60° / −60°**. **Two shot** restores that staging after Solo; **Reset** changes only the camera. Saved scenes keep their existing turns.
 
 The **Backdrop** selector uses current Goosnav environment assets: the black-pyramid sunset, red-mesa canyon, space, Backrooms, overgrown courtyard, reading hall, and Threshold. These are bundled local assets with their actual artwork, not procedural substitutes. The distant desert panoramas rotate with the camera; nearby geometry supplies perspective. **Over A / Over B** frames the other character over a foreground shoulder. Backdrops stay still across mouth drawings, so you can trace the background once and reuse it.
@@ -38,6 +42,12 @@ The **Action** menu offers the full current comic-engine action/gesture catalog 
 Under **Scene → Objects**, add the actual Goosnav book, a goose, or a cube, sphere, or triangular prism. Set dimensions, position, rotation, and color; attach an object to either hand to follow its joints. Object transforms can also be keyed in Animation. Shoulder, elbow, wrist, finger, leg, head, and body controls are available. Book opening and page turn can be keyed, as can cartoon scaling and rotation effects. Opening, turning, reading, holding, closing, and slamming also work on hand-attached books without altering earlier frames. Place and Throw require a world-placed book; an attached book is left intact with a short instruction to change Attach to World. Book artwork comes from the current asset library and is not recolored by the primitive color control.
 
 Retiming can reuse drawings when the sampled poses stay the same. Changing poses, adding objects, or introducing new speech/motion combinations may require fresh references. A last key extends the clip enough to show its destination pose; shortening past existing keys asks you to move or remove them first. **Clear** restores all defaults while keeping the previous clip in Saved clips.
+
+## Set up a clip from JSON
+
+Use **Load JSON** to configure characters, chairs, camera, dialogue, expressions, timed actions, and drawing density from one file. Speech is generated automatically; silent scenes are ready immediately. **Export JSON** saves the current setup and editable motion keys, including GUI changes. **Example JSON** downloads a working conversation recipe. Invalid files leave the current scene intact.
+
+See the [configuration guide](docs/config.md) and [speech](examples/speech-scene.json) / [silent animation](examples/silent-scene.json) examples. JSON contains the editable setup; use a project ZIP backup to retain drawings and recorded audio.
 
 ## Start locally
 

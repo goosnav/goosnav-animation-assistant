@@ -5,6 +5,7 @@
 <header><h1>GOOSNAV<sup>®</sup> ANIMATION ASSISTANT<span class="color-blocks" aria-hidden="true"><i></i><i></i><i></i><i></i></span></h1><div class="project-tools"><button id="new" title="Clear project to defaults">Clear</button><button id="duplicate">Duplicate</button><button id="undo">Undo</button><button id="redo">Redo</button><details><summary>Project</summary><div class="menu"><button id="save-project">Save backup</button><label class="file-button">Open backup<input id="open-project" type="file" accept=".zip"></label><button id="quit-local" hidden>Quit</button></div></details></div></header>
 <main>
  <div class="project-title"><label>Clip<input id="title" maxlength="200" value="An ordinary conversation"></label><p id="saved" role="status">Loading…</p></div>
+ <div class="button-list config-tools"><label class="file-button">Load JSON<input id="load-config" type="file" accept=".json,application/json"></label><button id="export-config">Export JSON</button><button id="example-config">Example JSON</button></div>
  <details id="saved-clips"><summary>Saved clips</summary><div id="saved-list" class="button-list"></div></details>
  <nav class="steps" aria-label="Animation steps"><button data-tab="stage" aria-current="step">Scene</button><button data-tab="rehearse">Speech</button><button data-tab="animate">Animation</button><button data-tab="draw">Draw</button><button data-tab="finish">Export</button></nav>
  <div id="status" class="status" role="status" aria-live="polite">Loading…</div>

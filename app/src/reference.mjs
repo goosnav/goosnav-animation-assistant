@@ -1,6 +1,6 @@
 // Reference annotations describe reusable mouth drawings, not transcript letters.
 // Keep this module out of the finished-animation render path.
-export const REFERENCE_VERSION = 6;
+export const REFERENCE_VERSION = 7;
 export function referenceGuideKey(project){return JSON.stringify([!!project.guides?.ground,!!project.guides?.backdrop]);}
 const sounds={rest:'M/B/P',small:'E',open:'A',wide:'EE',round:'O/U',teeth:'F/V'};
 export function referenceLabels(state){

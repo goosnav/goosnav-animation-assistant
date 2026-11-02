@@ -132,5 +132,23 @@
     "sourceCommit": "25f80c5301d80b486015eaa291b6c4ae57f8f3bb",
     "sourceSha256": "ca952364f87c6b775dfcc91a6840b0bcff61704aa6b05074fbbbdaf0d231a96c",
     "transform": "8K linear EXR to sRGB JPEG quality95, Blender Standard view, exposure0/gamma1; tools/export-stage-skybox.py"
+  },
+  {
+    "file": "chair-folding.glb",
+    "sha256": "c18f0211fc97757d59dbd6966538b41e76ef2a10780dbc54c09c88069625e847",
+    "source": "submodules/goosnav-3D-assets/exports/chair-folding.glb",
+    "sourceCommit": "436a2f985f1c0a975160c97b8a23ba2c90567ba2"
+  },
+  {
+    "file": "chair-wood.glb",
+    "sha256": "2b47d3877f54986f1fe8d7d27f02b17a0a15dc234a9c00838dde7cb5254bf4c1",
+    "source": "submodules/goosnav-3D-assets/exports/chair-wood.glb",
+    "sourceCommit": "436a2f985f1c0a975160c97b8a23ba2c90567ba2"
+  },
+  {
+    "file": "chair-stool.glb",
+    "sha256": "6e868d90850084884007f8d3b5cd2cc6ce36776e7380ad5a03078c2ba1d1cf30",
+    "source": "submodules/goosnav-3D-assets/exports/chair-stool.glb",
+    "sourceCommit": "436a2f985f1c0a975160c97b8a23ba2c90567ba2"
   }
 ]

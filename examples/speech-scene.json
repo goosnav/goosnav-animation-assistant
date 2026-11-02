@@ -1,0 +1,21 @@
+{
+  "format": "goosnav-animation-config",
+  "version": 1,
+  "title": "A perfectly ordinary chair",
+  "scene": {
+    "format": "landscape",
+    "actors": [
+      {"model": "v12", "x": -0.6, "yaw": 35, "pose": "sitting", "chair": "wood", "emotion": "happy"},
+      {"model": "v12-fat-glasses", "x": 0.6, "yaw": -35, "pose": "sitting", "chair": "folding", "emotion": "skeptical"}
+    ]
+  },
+  "dialogue": [
+    {"actor": 0, "text": "I found us two perfectly ordinary chairs.", "emotion": "happy", "pause": 0.5},
+    {"actor": 1, "text": "Then why are you waving your arms?", "emotion": "skeptical", "blink": true}
+  ],
+  "timing": {"mode": "speech", "duration": 5, "drawings": 3},
+  "actions": [
+    {"actor": 0, "action": "arm_flail", "time": 0.3, "duration": 2, "strength": 0.75},
+    {"actor": 1, "action": "head_tilt", "time": 3, "duration": 1.5}
+  ]
+}
