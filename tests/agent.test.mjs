@@ -68,3 +68,18 @@ test('command controller provides allowlisted operations, revisions and keeps ac
  assert.deepEqual(workspace.status().artifacts,[]);assert.equal((await workspace.command('cancel')).ok,true);
  workspace.dispose();
 });
+
+test('agent help and instructions expose the reference-delivery default without changing the document or starting work',async()=>{
+ const workspace=createAgentWorkspace({text:scene()}),before=workspace.exportJSON();
+ const instructions=await workspace.command('instructions');assert.equal(instructions.ok,true);
+ const workflow=instructions.workflow;
+ assert.equal(workflow.defaultTask,'generate-reference-package');assert.equal(workflow.userInstructionsTakePrecedence,true);
+ assert.equal(workflow.deliverables.defaultFormat,'mp4');assert.equal(workflow.deliverables.matchingExportedJSON,true);
+ assert.equal(workflow.delivery.unspecifiedDestination,'local');
+ assert.deepEqual((await workspace.command('help')).workflow,workflow);
+ assert.deepEqual(capabilities().workflow,workflow);assert.deepEqual(workspace.instructions().workflow,workflow);
+ assert.equal(workspace.status().instructions.url,'/AGENTS.md');assert.equal(workspace.status().busy,false);
+ assert.deepEqual(workspace.exportJSON(),before);assert.deepEqual(workspace.status().artifacts,[]);
+ workflow.steps[0].instructions='corrupted caller copy';assert.notDeepEqual(workspace.instructions().workflow,workflow);
+ assert.equal((await workspace.command('instructions {}')).ok,false);workspace.dispose();
+});

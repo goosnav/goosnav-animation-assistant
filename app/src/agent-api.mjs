@@ -7,7 +7,8 @@ import {animationSettings} from './motion.mjs';
 import {Stage} from './stage.mjs';
 import {compositionDiagnostics,fittedCamera} from './agent-composition.mjs';
 import {capabilities,LIMITS,COMMANDS} from './agent-catalog.mjs';
-export {capabilities};
+import {agentInstructions} from './agent-workflow.mjs';
+export {capabilities,agentInstructions};
 
 const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
 const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
@@ -133,7 +134,7 @@ const imageMetadata=image=>{const {dataURL,...rest}=image;return rest;};
 export function createAgentWorkspace({text=sampleDocument(),onChange=()=>{},onResult=()=>{}}={}){
  let currentText='',revision=0,lastPreview=null,busy=false,progress=null,errors=[],controller=null,job=0,disposed=false;
  const notify=()=>onChange(status());
- function status(){return {ok:true,revision,busy,progress:progress?{...progress}:null,errors:structuredClone(errors),artifacts:lastPreview?[...lastPreview.images,...(lastPreview.contactSheet?[lastPreview.contactSheet]:[])].map(imageMetadata):[],previewRevision:lastPreview?.revision??null};}
+ function status(){return {ok:true,instructions:{url:'/AGENTS.md',command:'instructions'},revision,busy,progress:progress?{...progress}:null,errors:structuredClone(errors),artifacts:lastPreview?[...lastPreview.images,...(lastPreview.contactSheet?[lastPreview.contactSheet]:[])].map(imageMetadata):[],previewRevision:lastPreview?.revision??null};}
  function report(result){errors=result.ok?[]:result.errors;onResult(result);notify();return result;}
  function cancel(){controller?.abort();controller=null;job++;busy=false;progress=null;notify();return {ok:true,cancelled:true};}
  function accept(next,result){cancel();currentText=next;revision++;return report({...result,revision});}
@@ -167,11 +168,13 @@ export function createAgentWorkspace({text=sampleDocument(),onChange=()=>{},onRe
    }
    if(typeof name!=='string'||!Object.hasOwn(COMMANDS,name))invalid('Unknown command. Run help for the allowlist.');
    if(!['patch','preview','frame'].includes(name)&&args!==undefined)invalid(`${name} takes no arguments.`);
-   if(name==='help')return {ok:true,commands:structuredClone(COMMANDS)};
+   if(name==='help')return {ok:true,workflow:agentInstructions(),commands:structuredClone(COMMANDS)};
+   if(name==='instructions')return instructions();
    if(name==='status')return status();if(name==='validate')return validate();if(name==='cancel')return cancel();if(name==='exportJSON')return {ok:true,text:currentText,revision};if(name==='patch')return edit(args);
    if(name==='preview'){previewOptions(args??{});return run('preview',args??{});}return run('frame',args??{});
   }catch(error){return report(failure(error));}
  }
+ const instructions=()=>({ok:true,workflow:agentInstructions()});
  const initial=inspectDocument(text);if(!initial.ok)throw Error(initial.errors[0].message);currentText=text;revision=1;
- return {status,load,validate,edit,frame:options=>run('frame',options??{}),preview:options=>run('preview',options??{}),exportJSON:()=>({ok:true,text:currentText,revision}),command,cancel,dispose(){cancel();disposed=true;lastPreview=null;}};
+ return {status,instructions,load,validate,edit,frame:options=>run('frame',options??{}),preview:options=>run('preview',options??{}),exportJSON:()=>({ok:true,text:currentText,revision}),command,cancel,dispose(){cancel();disposed=true;lastPreview=null;}};
 }

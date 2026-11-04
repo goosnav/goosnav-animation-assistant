@@ -1,7 +1,10 @@
 # Goosnav Animation Assistant
 
+Default task for an agent: develop or use the user’s script, compose creative and drawable scenes, inspect real rendered previews, export the reference MP4 AND its matching JSON, and verify delivery to the user’s cloud/computer folder (save locally when unspecified). Specific user instructions override this default. Full operating directions are below and at /AGENTS.md.
+
 Local, deterministic animation authoring with editable scene/sequence JSON and real rendered image feedback.
 
+- Default operating directions: /AGENTS.md
 - Visual agent workspace: /agent.html
 - Browser ES module: /agent-api.mjs
 - API contracts and review workflow: /docs/agents.md
@@ -10,9 +13,9 @@ Local, deterministic animation authoring with editable scene/sequence JSON and r
 - Human animation editor: /
 - Production reference/artwork/animation pipeline: /pipeline.mjs
 
-Start by importing /agent-api.mjs and calling capabilities() for the current models, enums, actions, channel ranges and limits. inspectDocument(text) validates without generating speech. editDocument(text, operations) applies atomic JSON-pointer set operations. previewDocument(text, options) returns actual PNG data URLs, frame/shot/drawing identity and measured composition diagnostics. frameDocument(text, options) fits a front camera to posed model geometry while preserving actor and speaker identity.
+Start by reading /AGENTS.md. Import /agent-api.mjs and call agentInstructions() for the same workflow, then capabilities() for the current models, enums, actions, channel ranges and limits. inspectDocument(text) validates without generating speech. editDocument(text, operations) applies atomic JSON-pointer set operations. previewDocument(text, options) returns actual PNG data URLs, frame/shot/drawing identity and measured composition diagnostics. frameDocument(text, options) fits a front camera to posed model geometry while preserving actor and speaker identity.
 
-On /agent.html, window.animationAgent exposes a stateful isolated workspace. Commands: help, status, validate, preview, patch, frame, exportJSON, cancel. Example: await animationAgent.command('preview {"maxDimension":384}'). The visible Commands panel uses the same API. This is an app command language; it does not execute shell commands or JavaScript.
+On /agent.html, window.animationAgent exposes a stateful isolated workspace. Commands: instructions, help, status, validate, preview, patch, frame, exportJSON, cancel. Example: await animationAgent.command('preview {"maxDimension":384}'). The visible Commands panel uses the same API. This is an app command language; it does not execute shell commands or JavaScript.
 
 Review loop: inspect -> render selected frames -> VIEW the returned PNG images -> edit exact paths -> render the same samples -> compare. Head visibility and bounds assist review but cannot establish artistic quality. Do not infer that an image was reviewed merely because its metadata was read.
 

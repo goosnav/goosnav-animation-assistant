@@ -4,6 +4,12 @@ Open [`/agent.html`](/agent.html) to edit a scene or sequence recipe and inspect
 
 No remote AI service, API key, shell execution or model subscription is involved. Rendering requires a browser with WebGL. The existing local speech and scene/sequence pipeline supplies the animation states.
 
+## Default task
+
+Read [/AGENTS.md](/AGENTS.md) first. Unless the user gives a different task, develop or use their script, compose one scene or a film, inspect actual rendered images, export reference MP4 plus matching JSON, and verify the files were saved to their requested cloud/computer folder. Save locally when no destination is specified. These defaults cover creative direction, animation workload, complete motion, and delivery; the artist returns their drawings later for final assembly.
+
+The full guidance is also in `/llms.txt`, the nonvisual `#agent-workflow` JSON element on both entry pages, `capabilities().workflow`, `agentInstructions()`, and the `instructions`/`help` commands. `status()` points to the same instructions without repeating them on every poll. Reading instructions never starts generation or uploads files.
+
 ## Discover before editing
 
 ```js
@@ -17,7 +23,8 @@ The module exports:
 
 | Operation | Input | Result |
 | --- | --- | --- |
-| `capabilities()` | None | Catalog, command contracts and limits |
+| `capabilities()` | None | Default workflow, catalog, command contracts and limits |
+| `agentInstructions()` | None | Default creative, reference-export and verified-delivery workflow |
 | `sampleDocument()` | None | Valid, silent two-actor JSON text |
 | `inspectDocument(text)` | Scene or sequence JSON text | `{ok, kind, title, shots, warnings}` or structured errors |
 | `editDocument(text, operations)` | JSON text and 1–100 set operations | Validated new `text`, `changedPaths` and inspection |
@@ -115,6 +122,7 @@ On the workspace page, the collapsed **Commands** panel and `window.animationAge
 
 | Command | Example |
 | --- | --- |
+| `instructions` | `await animationAgent.command('instructions')` |
 | `help` | `await animationAgent.command('help')` |
 | `status` | `animationAgent.status()` |
 | `validate` | `await animationAgent.command('validate')` |
@@ -135,7 +143,7 @@ const state = animationAgent.status(); // safe to poll from another browser oper
 const result = await job;
 ```
 
-The controller also exposes `load(text)`, `validate()`, `edit(operations)`, `frame(options)`, `preview(options)`, `exportJSON()`, `cancel()` and `dispose()`. `onChange(status)` and `onResult(result)` callbacks are available on a controller you create yourself. Starting a new render, accepting another document or cancelling invalidates an older pending job. Typing in the page's JSON editor also cancels a pending job, preserving the newer draft. Invalid edits and cancelled jobs keep the last accepted document and successful previews. A preview whose revision differs from the current document is marked stale. Manually editing the text area requires **Validate** or **Preview images** before commands operate on the new text.
+The controller also exposes `instructions()`, `load(text)`, `validate()`, `edit(operations)`, `frame(options)`, `preview(options)`, `exportJSON()`, `cancel()` and `dispose()`. `onChange(status)` and `onResult(result)` callbacks are available on a controller you create yourself. Starting a new render, accepting another document or cancelling invalidates an older pending job. Typing in the page's JSON editor also cancels a pending job, preserving the newer draft. Invalid edits and cancelled jobs keep the last accepted document and successful previews. A preview whose revision differs from the current document is marked stale. Manually editing the text area requires **Validate** or **Preview images** before commands operate on the new text.
 
 ## Editor handoff and limits
 
