@@ -450,6 +450,17 @@ $('#load-config').onchange=e=>{
  });
 };
 $('#editor-mode').onclick=()=>setWorkspace('editor');$('#batch-mode-button').onclick=()=>setWorkspace('batch');
+$('#agent-workspace-link').onclick=event=>{
+ if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
+ const href=event.currentTarget.href;
+ event.preventDefault();
+ if(busy||recordingActive){status('Finish or cancel the current task before opening the agent workspace.',true);return;}
+ if(animationEditor&&!animationEditor.finishEdits())return;
+ return run('Saving before opening the agent workspace…',async()=>{await flushSave();location.assign(href);});
+};
+const backupMenu=$('#backup-menu');
+document.addEventListener('pointerdown',event=>{if(backupMenu.open&&!backupMenu.contains(event.target))backupMenu.open=false;});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&backupMenu.open){backupMenu.open=false;backupMenu.querySelector('summary').focus();}});
 $('#editor-output').hidden=!globalThis.showDirectoryPicker;
 $('#editor-output').onclick=async()=>{try{editorOutput=await showDirectoryPicker({id:'animation-editor-output',mode:'readwrite'});$('#editor-output-label').textContent=editorOutput.name;$('#editor-reset-output').hidden=false;}catch(e){if(e.name!=='AbortError')status(e.message,true);}};
 $('#editor-reset-output').onclick=()=>{editorOutput=null;$('#editor-output-label').textContent='Downloads';$('#editor-reset-output').hidden=true;};

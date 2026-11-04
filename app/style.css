@@ -40,7 +40,23 @@ h1,h2,h3,button,.file-button,summary,.steps button{font-family:var(--sans);text-
 
 #shots-panel{margin:16px 0 20px;border-top:1px solid #ccc;border-bottom:1px solid #ccc;padding:12px 0}.shot-heading{display:flex;align-items:center;gap:12px}.shot-heading h2{font-size:16px;margin:0}.shot-heading span{flex:1;font:12px var(--sans);color:#555}.shot-heading button{padding:8px 12px;font-size:12px}.shot-list{display:flex;gap:8px;overflow-x:auto;padding:10px 0;max-width:100%}.shot-list button{flex:0 0 154px;display:grid;grid-template-columns:25px 1fr;gap:5px;text-align:left;padding:8px;font-size:11px;border:1px solid #aaa}.shot-list button[aria-pressed=true]{border:2px solid var(--blue);padding:7px;background:#f5f7fd}.shot-list img{width:100%;height:70px;object-fit:contain;grid-column:1/-1;background:#eee}.shot-list strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.shot-list span{color:#666}#shot-settings{display:flex;align-items:end;gap:12px}#shot-settings label{max-width:300px;flex:1;font-size:12px}#shot-settings input{padding:8px;font-size:13px}#shot-options summary{font-size:12px;padding:8px}#shot-options .button-list{margin:8px 0}#film-scope{overflow-wrap:anywhere}@media(max-width:700px){.shot-heading{flex-wrap:wrap}.shot-heading span{flex-basis:50%}.shot-list button{flex-basis:124px}#shot-settings{align-items:start;flex-wrap:wrap}#shots-panel{margin:10px 0}.shot-list img{height:52px}}
 
-.menu .agent-link{display:block;margin-top:12px;border-top:1px solid #ddd;padding-top:12px;font:700 13px var(--sans);text-transform:uppercase;text-decoration:none}.menu .agent-link:focus-visible{outline:3px solid var(--blue);outline-offset:3px}
+/* Workspaces stay in the header; editing and portable backups belong to the current animation. */
+header .mode-switch{margin:0;flex-shrink:0;align-items:center}
+.mode-switch button,.mode-switch a{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:10px 14px;font:700 14px/1.2 var(--sans);border:0;border-bottom:3px solid transparent;text-decoration:none;text-transform:none;white-space:nowrap}
+.mode-switch a:hover{border-bottom-color:var(--ink)}
+.mode-switch a:focus-visible{outline:3px solid var(--blue);outline-offset:3px}
+.title-and-save{flex:1;min-width:0}.title-and-save label{display:block}.project-title p{margin-top:4px}
+.project-tools{position:relative;align-items:center;justify-content:flex-end;flex-shrink:0}
+.project-tools details{position:static;border:0;padding:0}
+.project-tools summary{min-height:48px;display:flex;align-items:center;gap:7px}
+.project-tools summary::after{content:'+';font-weight:400}.project-tools details[open] summary::after{content:'−'}
+.project-tools details[open] summary{background:var(--surface)}
+.menu{top:calc(100% + 6px);right:0;width:min(280px,calc(100vw - 32px));padding:14px;display:grid;gap:8px;z-index:8}
+.menu button,.menu .file-button{width:100%;font-size:14px;padding:10px}
+.menu p{font:12px/1.5 var(--sans);color:var(--muted);margin:4px 0 0}
+@media(max-width:900px){.project-title{flex-direction:column;align-items:stretch;gap:12px}.title-and-save{width:100%}.project-title label{max-width:none}.project-tools{width:100%;justify-content:flex-start}}
+@media(max-width:700px){header .mode-switch{width:100%;gap:4px}.mode-switch button,.mode-switch a{padding:8px 10px;font-size:13px}.project-title p{max-width:none;font-size:12px}.project-tools>*{flex:0 0 auto}.project-tools>button,.project-tools summary{font-size:12px;padding:8px}}
+
 
 @media(max-width:700px){body:is([data-step=draw],[data-step=finish]) .shot-list img{display:none}body:is([data-step=draw],[data-step=finish]) #shot-settings>label{display:none}body:is([data-step=draw],[data-step=finish]) #shots-panel{padding:6px 0}body:is([data-step=draw],[data-step=finish]) .shot-list{padding:6px 0}body:is([data-step=draw],[data-step=finish]) #shot-options{margin:0}}
 @media(max-width:700px){.config-tools{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.config-tools button,.config-tools .file-button{min-width:0;padding:8px 5px;font-size:11px}#saved-clips{margin-top:12px}}

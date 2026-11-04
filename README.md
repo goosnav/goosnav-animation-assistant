@@ -59,7 +59,7 @@ All shots share the canvas orientation and 24 fps. A film supports 20 shots and 
 
 ## Visual tools for agents
 
-**Project → Agent workspace** opens a separate authoring page. It validates scene or sequence JSON, makes precise JSON-pointer edits, renders real PNG frames and contact sheets, and fits the camera to posed character geometry. Every preview includes drawing identities and measured visibility information. The black-and-green workspace keeps Goosnav typography and square controls; reference image colors stay intact. Sequence validation warns about nearly identical adjacent shots. The [dialogue coverage example](examples/dialogue-coverage.json) demonstrates wide → A close-up → B close-up → return wide. Agents should inspect those images before accepting composition changes.
+**Agent workspace** in the header, beside **Editor** and **Batch**, opens a separate authoring page. It validates scene or sequence JSON, makes precise JSON-pointer edits, renders real PNG frames and contact sheets, and fits the camera to posed character geometry. Every preview includes drawing identities and measured visibility information. The black-and-green workspace keeps Goosnav typography and square controls; reference image colors stay intact. Sequence validation warns about nearly identical adjacent shots. The [dialogue coverage example](examples/dialogue-coverage.json) demonstrates wide → A close-up → B close-up → return wide. Agents should inspect those images before accepting composition changes.
 
 Agents receive the default script-to-reference workflow through `/AGENTS.md`, `/llms.txt`, nonvisual HTML metadata, API capabilities, and the `instructions`/`help` commands. It defaults to Reels (1080 × 1920), large centered characters with balanced margins, creative composition, checking rendered images, exporting MP4 plus matching JSON, and verifying delivery to the requested cloud/computer folder or a local fallback. Specific user instructions take precedence.
 
@@ -149,7 +149,7 @@ After the first deployment, add **animation.goosnav.shop** in the Pages project'
 
 ## Storage and compatibility
 
-Hosted clips use IndexedDB on the current browser/origin. Clearing website data can remove them. **Project → Save backup** downloads a portable archive with scene, timings, drawings, and sound; open it on another device. Saved clips and duplicate scenes stay on the current device. Local launchers store files under `GoosnavAnimationAssistant` in the platform application-data directory.
+Hosted clips use IndexedDB on the current browser/origin. Clearing website data can remove them. **Backups → Save backup (.zip)** downloads a portable archive with scene, timings, drawings, and sound; open it on another device. Saved clips and duplicate scenes stay on the current device. Local launchers store files under `GoosnavAnimationAssistant` in the platform application-data directory.
 
 Use HTTPS on iPad for native sharing and microphone access. Keep the app in the foreground while recording or using real-time video export. MP4 support is tested on the current browser before export; unsupported codecs produce a visible error rather than a mislabeled WebM. Physical iPad Safari, Photos, and Procreate testing is still required; Chromium viewport tests do not establish iPad support.
 
