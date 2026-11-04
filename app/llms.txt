@@ -1,6 +1,8 @@
 # Goosnav Animation Assistant
 
-Default format: Reels (portrait 9:16, 1080 × 1920). Use landscape only when requested. Frame characters large and centered, minimize negative space, balance top/bottom and left/right margins, and preserve the complete intended pose and action without accidental cropping. Use frameDocument with body fit and 5% padding as a starting point; inspect the rendered images at action extremes.
+Default format: Reels (portrait 9:16, 1080 × 1920). Use landscape only when requested. Frame characters large and centered, minimize negative space, balance top/bottom and left/right margins, and preserve the complete intended pose and action without accidental cropping. Use body fits with 5% padding for wides and face/upper-torso framing for close-ups; inspect the rendered images at action extremes.
+
+Default dialogue coverage: wide with both characters → A close-up speaking → B close-up speaking → return wide for the reaction/payoff. Create one sequence export. A 2% zoom is not a new shot. Close-ups emphasize the speaking face and upper torso; do not body-fit every shot. Preserve script order and local actor identity, and compare rendered contact sheets at each cut. Read inspectDocument/validate coverage warnings and revise accidental near-duplicate cuts. Adapt this pattern to the script or explicit user shot list. Example: /examples/dialogue-coverage.json.
 
 Default task for an agent: develop or use the user’s script, compose creative and drawable scenes, inspect real rendered previews, export the reference MP4 AND its matching JSON, and verify delivery to the user’s cloud/computer folder (save locally when unspecified). Specific user instructions override this default. Full operating directions are below and at /AGENTS.md.
 

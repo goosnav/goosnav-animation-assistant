@@ -1,0 +1,175 @@
+{
+  "format": "goosnav-animation-sequence",
+  "version": 1,
+  "id": "dialogue-coverage",
+  "title": "A plan in four shots",
+  "shots": [
+    {
+      "id": "opening-wide",
+      "title": "Wide \u2014 the plan",
+      "config": {
+        "format": "goosnav-animation-config",
+        "version": 1,
+        "scene": {
+          "format": "portrait",
+          "background": "#ffffff",
+          "actors": [
+            {
+              "model": "blue",
+              "x": -0.4,
+              "yaw": 30,
+              "emotion": "happy"
+            },
+            {
+              "model": "rust-beady",
+              "x": 0.4,
+              "yaw": -30,
+              "emotion": "skeptical"
+            }
+          ],
+          "camera": {
+            "elevation": 0,
+            "zoom": 1.34,
+            "targetX": 0,
+            "targetY": 0.852648
+          }
+        },
+        "dialogue": [
+          {
+            "actor": 0,
+            "text": "I made a plan.",
+            "pause": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "id": "a-close",
+      "title": "A close-up \u2014 the explanation",
+      "config": {
+        "format": "goosnav-animation-config",
+        "version": 1,
+        "scene": {
+          "format": "portrait",
+          "background": "#ffffff",
+          "actors": [
+            {
+              "model": "blue",
+              "x": 0,
+              "yaw": 15,
+              "emotion": "happy"
+            }
+          ],
+          "camera": {
+            "elevation": 0,
+            "zoom": 3,
+            "targetX": 0,
+            "targetY": 1.48
+          }
+        },
+        "dialogue": [
+          {
+            "actor": 0,
+            "text": "We wait until the problem gets embarrassed.",
+            "pause": 0.3
+          }
+        ],
+        "actions": [
+          {
+            "actor": 0,
+            "action": "head_tilt",
+            "time": 0.3,
+            "duration": 1.2,
+            "strength": 0.5
+          }
+        ]
+      }
+    },
+    {
+      "id": "b-close",
+      "title": "B close-up \u2014 the question",
+      "config": {
+        "format": "goosnav-animation-config",
+        "version": 1,
+        "scene": {
+          "format": "portrait",
+          "background": "#ffffff",
+          "actors": [
+            {
+              "model": "rust-beady",
+              "x": 0,
+              "yaw": -15,
+              "emotion": "skeptical"
+            }
+          ],
+          "camera": {
+            "elevation": 0,
+            "zoom": 3,
+            "targetX": 0,
+            "targetY": 1.48
+          }
+        },
+        "dialogue": [
+          {
+            "actor": 0,
+            "text": "Does the problem know that?",
+            "pause": 0.3
+          }
+        ],
+        "actions": [
+          {
+            "actor": 0,
+            "action": "head_tilt",
+            "time": 0.3,
+            "duration": 1.1,
+            "strength": 0.5
+          }
+        ]
+      }
+    },
+    {
+      "id": "return-wide",
+      "title": "Return wide \u2014 the reaction",
+      "config": {
+        "format": "goosnav-animation-config",
+        "version": 1,
+        "scene": {
+          "format": "portrait",
+          "background": "#ffffff",
+          "actors": [
+            {
+              "model": "blue",
+              "x": -0.4,
+              "yaw": 30,
+              "emotion": "happy"
+            },
+            {
+              "model": "rust-beady",
+              "x": 0.4,
+              "yaw": -30,
+              "emotion": "skeptical"
+            }
+          ],
+          "camera": {
+            "elevation": 0,
+            "zoom": 1.34,
+            "targetX": 0,
+            "targetY": 0.852648
+          }
+        },
+        "dialogue": [
+          {
+            "actor": 0,
+            "text": "Not yet.",
+            "pause": 0.3
+          },
+          {
+            "actor": 1,
+            "text": "Then I will wait over here.",
+            "pause": 0.4
+          }
+        ]
+      }
+    }
+  ]
+}

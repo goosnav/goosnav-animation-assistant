@@ -14,6 +14,28 @@ test('agent starter and machine-readable defaults use Reels',()=>{
  assert.deepEqual(catalog.workflow.composition.dimensions,[1080,1920]);
 });
 
+test('sequence inspection warns about tiny-zoom cuts while keeping deliberate edits usable',async()=>{
+ const config=JSON.parse(scene());config.scene.camera={zoom:1};
+ const film={format:'goosnav-animation-sequence',version:1,id:'coverage',title:'Coverage',shots:[{id:'wide',title:'Wide',config},{id:'almost-wide',title:'Almost wide',config:structuredClone(config)}]};
+ film.shots[1].config.scene.camera.zoom=1.02;
+ const text=JSON.stringify(film),info=inspectDocument(text);
+ assert.equal(info.ok,true);assert.equal(info.coverage.cuts[0].similar,true);
+ assert.ok(info.warnings.some(message=>/nearly identical.*2%/i.test(message)));
+ const workspace=createAgentWorkspace({text});assert.equal((await workspace.command('validate')).coverage.cuts[0].similar,true);
+ assert.equal(workspace.exportJSON().text,text,'review must not rewrite user coverage');workspace.dispose();
+ film.shots[1].config.scene.camera.zoom=1.8;
+ assert.equal(inspectDocument(JSON.stringify(film)).coverage.cuts[0].similar,false);
+ film.shots[1].config.scene.camera={zoom:1,azimuth:40};
+ assert.equal(inspectDocument(JSON.stringify(film)).coverage.cuts[0].similar,false,'a substantial reverse angle is a different view');
+});
+
+test('wide, A single, B single, return wide coverage distinguishes subject changes and allows the return',()=>{
+ const wide=JSON.parse(scene()),single=index=>({...wide,scene:{...wide.scene,count:1,actors:[wide.scene.actors[index]]},dialogue:[{actor:0,text:'My turn.'}]});
+ const film={format:'goosnav-animation-sequence',version:1,shots:[{id:'wide',title:'Wide',config:wide},{id:'a',title:'A close',config:single(0)},{id:'b',title:'B close',config:single(1)},{id:'return',title:'Return wide',config:wide}]};
+ const result=inspectDocument(JSON.stringify(film));assert.equal(result.ok,true);
+ assert.equal(result.coverage.cuts.length,3);assert.ok(result.coverage.cuts.every(cut=>!cut.similar));assert.deepEqual(result.warnings,[]);
+});
+
 test('agent catalog exposes accepted model, channel and action parameters usable by strict parsing',()=>{
  const catalog=capabilities();
  for(const model of catalog.models){const data=JSON.parse(scene());data.scene.actors[0].model=model.id;assert.equal(inspectDocument(JSON.stringify(data)).ok,true);}

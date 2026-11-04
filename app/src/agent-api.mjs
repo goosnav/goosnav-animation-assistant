@@ -8,6 +8,7 @@ import {Stage} from './stage.mjs';
 import {compositionDiagnostics,fittedCamera} from './agent-composition.mjs';
 import {capabilities,LIMITS,COMMANDS} from './agent-catalog.mjs';
 import {agentInstructions} from './agent-workflow.mjs';
+import {reviewCoverage} from './agent-coverage.mjs';
 export {capabilities,agentInstructions};
 
 const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
@@ -21,9 +22,11 @@ function json(text){if(typeof text!=='string')invalid('Supply JSON text.');if(te
 function parse(text){const data=json(text);if(data?.format==='goosnav-animation-sequence'){const parsed=parseSequenceDocument(text,{allowStaleHandoff:true});return {kind:'sequence',data,...parsed};}const parsed=parseConfigDocument(text);return {kind:'scene',data,shots:[{id:'scene',title:parsed.project.title,config:data,...parsed}]};}
 function summary(parsed){
  const warnings=[];
+ const coverage=parsed.kind==='sequence'?reviewCoverage(parsed.shots):null;
+ if(coverage)warnings.push(...coverage.warnings);
  if(parsed.needsReferences)warnings.push('The shot or drawing list changed. Create new drawing references before importing artwork.');
  if(parsed.shots.some(shot=>shot.config.audio?.mode==='recording'))warnings.push('Portable JSON does not contain recorded audio. Preview uses the portable speech recipe.');
- return {ok:true,kind:parsed.kind,title:parsed.title||parsed.shots[0].project.title,shots:parsed.shots.map(shot=>({id:shot.id,title:shot.title,format:shot.project.scene.format,mode:animationSettings(shot.project).mode,duration:animationSettings(shot.project).duration,actors:shot.project.scene.actors.slice(0,shot.project.scene.count).map((actor,index)=>({actor:index,model:actor.model,pose:actor.pose})),dialogueLines:shot.project.lines.length,camera:structuredClone(shot.project.scene.camera),hasHandoff:!!shot.handoff})),warnings};
+ return {ok:true,kind:parsed.kind,title:parsed.title||parsed.shots[0].project.title,shots:parsed.shots.map(shot=>({id:shot.id,title:shot.title,format:shot.project.scene.format,mode:animationSettings(shot.project).mode,duration:animationSettings(shot.project).duration,actors:shot.project.scene.actors.slice(0,shot.project.scene.count).map((actor,index)=>({actor:index,model:actor.model,pose:actor.pose})),dialogueLines:shot.project.lines.length,camera:structuredClone(shot.project.scene.camera),hasHandoff:!!shot.handoff})),...(coverage?{coverage}:{}),warnings};
 }
 
 /** Strict syntax/schema inspection without speech, image generation or external mutations. */

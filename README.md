@@ -59,7 +59,7 @@ All shots share the canvas orientation and 24 fps. A film supports 20 shots and 
 
 ## Visual tools for agents
 
-**Project → Agent workspace** opens a separate authoring page. It validates scene or sequence JSON, makes precise JSON-pointer edits, renders real PNG frames and contact sheets, and fits the camera to posed character geometry. Every preview includes drawing identities and measured visibility information. Agents should inspect those images before accepting composition changes.
+**Project → Agent workspace** opens a separate authoring page. It validates scene or sequence JSON, makes precise JSON-pointer edits, renders real PNG frames and contact sheets, and fits the camera to posed character geometry. Every preview includes drawing identities and measured visibility information. The black-and-green workspace keeps Goosnav typography and square controls; reference image colors stay intact. Sequence validation warns about nearly identical adjacent shots. The [dialogue coverage example](examples/dialogue-coverage.json) demonstrates wide → A close-up → B close-up → return wide. Agents should inspect those images before accepting composition changes.
 
 Agents receive the default script-to-reference workflow through `/AGENTS.md`, `/llms.txt`, nonvisual HTML metadata, API capabilities, and the `instructions`/`help` commands. It defaults to Reels (1080 × 1920), large centered characters with balanced margins, creative composition, checking rendered images, exporting MP4 plus matching JSON, and verifying delivery to the requested cloud/computer folder or a local fallback. Specific user instructions take precedence.
 

@@ -39,6 +39,7 @@ function acceptDraft(){if(recipe.value===controller.exportJSON().text)return tru
 function selected(){const shot=$('shot').value;return shot==='all'?undefined:shot;}
 function displayFailure(error){message(error.message||String(error),true);}
 $('sample').onclick=()=>{recipe.value=sampleDocument();controller.load(recipe.value);};
+$('coverage-sample').onclick=async()=>{const button=$('coverage-sample');button.disabled=true;try{const response=await fetch('examples/dialogue-coverage.json');if(!response.ok)throw Error('Could not load the coverage example.');const text=await response.text();controller.load(text);}catch(error){displayFailure(error);}finally{button.disabled=false;}};
 $('file').onchange=async()=>{try{const file=$('file').files[0];if(!file)return;if(file.size>5_000_000)throw Error('Document exceeds 5 MB.');const text=await file.text();recipe.value=text;controller.load(text);}catch(error){displayFailure(error);}finally{$('file').value='';}};
 $('validate').onclick=()=>{if(acceptDraft())controller.validate();};
 $('preview').onclick=async()=>{if(!acceptDraft())return;const shotId=selected(),options={maxDimension:Number($('size').value)};if(shotId)options.samples=[{shotId,time:Number($('time').value)}];await controller.preview(options);};

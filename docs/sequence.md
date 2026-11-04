@@ -2,7 +2,7 @@
 
 A sequence joins ordered shots into one drawing-reference carrier and one finished animation. Each shot uses the existing scene configuration: its own camera, characters, dialogue, motion keys and audio. All shots use the same portrait or landscape orientation and 24 fps. Cuts occur exactly between frames.
 
-Start with [`examples/three-shot-sequence.json`](../examples/three-shot-sequence.json): A close-up, a wide shot with both speakers, then B close-up. A character shown alone is actor `0` within that shot; use its model and appearance to keep it consistent with the wide shot.
+Start with [`examples/dialogue-coverage.json`](../examples/dialogue-coverage.json): an opening wide two-shot, A close-up speaking, B close-up speaking, then a return wide for the reaction. The [three-shot example](../examples/three-shot-sequence.json) shows a shorter alternative. A character shown alone is actor `0` within that shot; use its model and appearance to keep it consistent with the wide shot.
 
 ```json
 {

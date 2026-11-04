@@ -10,10 +10,13 @@ async function openWorkspace(){
  const browser=await chromium.launch({headless:true,args:['--no-sandbox','--use-gl=angle','--use-angle=swiftshader']});
  try{
   const bundles={};for(const entry of ['agent-api','agent-ui'])bundles[`/${entry}.mjs`]=(await build({entryPoints:[`app/src/${entry}.mjs`],bundle:true,format:'esm',write:false})).outputFiles[0].text;
+  bundles['/voice-worker.mjs']=(await build({entryPoints:['app/src/speech/worker.mjs'],bundle:true,format:'esm',write:false})).outputFiles[0].text;
   const page=await browser.newPage();await page.route('http://localhost:19879/**',async route=>{
    const path=new URL(route.request().url()).pathname;
    if(bundles[path])return route.fulfill({contentType:'text/javascript',body:bundles[path]});
+   if(path==='/vendor/flite.wasm')return route.fulfill({contentType:'application/wasm',body:await fs.readFile('node_modules/@echogarden/flite-wasi/flite.wasm')});
    if(path.startsWith('/assets/'))return route.fulfill({contentType:path.endsWith('.jpg')?'image/jpeg':'model/gltf-binary',body:await fs.readFile(`app${path}`)});
+   if(path.startsWith('/examples/'))return route.fulfill({contentType:'application/json',body:await fs.readFile(`.${path}`)});
    if(path==='/agent.css')return route.fulfill({contentType:'text/css',body:await fs.readFile('app/agent.css')});
    return route.fulfill({contentType:'text/html',body:await fs.readFile('app/agent.html')});
   });await page.goto('http://localhost:19879/agent.html');await page.waitForFunction(()=>!!window.animationAgent);return {browser,page};
@@ -41,6 +44,41 @@ test('Reels camera fit fills the available frame and balances margins without cr
    assert.ok(Math.abs(left-(1-right))<.04,'left and right margins should balance');
    await fs.writeFile(`.work/reels-fit-${index}.png`,Buffer.from(image.dataURL.split(',')[1],'base64'));
   }
+ }finally{await browser.close();}
+});
+
+test('agent workspace uses the black and green Goosnav controls without recoloring preview pixels',async()=>{
+ const {browser,page}=await openWorkspace();try{
+  const style=await page.evaluate(()=>({background:getComputedStyle(document.documentElement).backgroundColor,ink:getComputedStyle(document.documentElement).color,font:getComputedStyle(document.querySelector('h1')).fontFamily,radius:getComputedStyle(document.querySelector('.recipe-panel')).borderRadius}));
+  assert.equal(style.background,'rgb(0, 0, 0)');assert.equal(style.ink,'rgb(102, 255, 102)');assert.match(style.font,/Helvetica/);assert.equal(style.radius,'0px');
+  assert.ok(await page.getByText('GOOSNAV',{exact:false}).first().isVisible());
+  await page.getByRole('button',{name:'Preview images',exact:true}).click();const picture=page.getByRole('img',{name:/Scene.*0.00 s/}).first();await picture.waitFor();
+  assert.equal(await picture.evaluate(node=>getComputedStyle(node).filter),'none');
+  await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await fs.mkdir('.work',{recursive:true});await page.screenshot({path:'.work/agent-green-mobile.png',fullPage:true});
+  await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:'.work/agent-green-desktop.png',fullPage:true});
+ }finally{await browser.close();}
+});
+
+test('dialogue coverage example renders a wide, distinct speaker close-ups and a return wide',async()=>{
+ const {browser,page}=await openWorkspace();try{
+  await page.getByRole('button',{name:'Load dialogue coverage',exact:true}).click();
+  await page.waitForFunction(()=>JSON.parse(window.animationAgent.exportJSON().text).shots?.length===4);
+  const result=await page.evaluate(async()=>{
+   const api=await import('/agent-api.mjs'),text=window.animationAgent.exportJSON().text,inspection=api.inspectDocument(text);
+   const preview=await window.animationAgent.preview({maxDimension:640,samples:[{shotId:'opening-wide'},{shotId:'a-close'},{shotId:'b-close'},{shotId:'return-wide'},{shotId:'a-close',time:.8},{shotId:'b-close',time:.8}]});
+   return {inspection,preview,data:JSON.parse(text)};
+  });
+  assert.equal(result.preview.ok,true,JSON.stringify(result.preview.errors));assert.deepEqual(result.inspection.coverage.warnings,[]);
+  assert.deepEqual(result.inspection.shots.map(s=>s.actors.length),[2,1,1,2]);
+  const [wide,a,b,returnWide]=result.preview.images,headHeight=(image,index)=>{const bounds=image.diagnostics.actors[index].head.bounds;return bounds.bottom-bounds.top;};
+  assert.ok(headHeight(a,0)>headHeight(wide,0)*1.5,'A close-up substantially enlarges the speaking face');
+  assert.ok(headHeight(b,0)>headHeight(wide,1)*1.5,'B close-up substantially enlarges the speaking face');
+  for(const image of result.preview.images)assert.ok(image.diagnostics.actors.every(actor=>actor.head.visible&&!actor.head.clipped),'speaking faces stay visible through the action');
+  assert.ok([...wide.diagnostics.actors,...returnWide.diagnostics.actors].every(actor=>!actor.clipped),'wide shots preserve full bodies');
+  assert.equal(result.data.shots[2].config.scene.actors[0].model,result.data.shots[0].config.scene.actors[1].model);
+  assert.ok(result.data.shots[2].config.dialogue.every(line=>line.actor===0),'B dialogue uses B’s local actor index');
+  await fs.mkdir('.work',{recursive:true});await fs.writeFile('.work/dialogue-coverage-contact.png',Buffer.from(result.preview.contactSheet.dataURL.split(',')[1],'base64'));
  }finally{await browser.close();}
 });
 

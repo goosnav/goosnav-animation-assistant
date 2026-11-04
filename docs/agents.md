@@ -10,7 +10,15 @@ Read [/AGENTS.md](/AGENTS.md) first. Unless the user gives a different task, dev
 
 The full guidance is also in `/llms.txt`, the nonvisual `#agent-workflow` JSON element on both entry pages, `capabilities().workflow`, `agentInstructions()`, and the `instructions`/`help` commands. `status()` points to the same instructions without repeating them on every poll. Reading instructions never starts generation or uploads files.
 
-Default to **Reels, 1080 × 1920 (9:16)**: `scene.format: "portrait"` in every shot. Use landscape when the user asks. Frame the cast large and centered; minimize negative space and balance the top/bottom and left/right margins. Keep the intended poses, heads, hands, feet and required props within the drawing area throughout the action. Start with a body camera fit (default 5% padding), inspect the pixels at motion extremes, then adjust staging and camera for a stable shot.
+Default to **Reels, 1080 × 1920 (9:16)**: `scene.format: "portrait"` in every shot. Use landscape when the user asks. Frame the cast large and centered; minimize negative space and balance the top/bottom and left/right margins. For full-body shots keep heads, hands, feet and required props within the drawing area throughout the action. Start wide shots with a body camera fit (default 5% padding); use face/upper-torso framing for close-ups as described below. Inspect motion extremes and keep the camera stable within each shot.
+
+## Dialogue coverage
+
+Default to one film with an opening wide two-shot, A speaking in close-up, B speaking in close-up, and a return wide for the reaction/payoff. Adapt the coverage to the script and explicit user directions. Load `/examples/dialogue-coverage.json` or use **Load dialogue coverage** in the agent workspace.
+
+A 2% zoom change is not a new shot. A close-up changes the emphasis to one speaking character, with the face and upper torso prominent; aim for at least 1.5× the face height seen in the wide. Use full-body fitting for wide shots, and head/upper-torso framing for close-ups. Deliberately omitting the lower body in a close-up is allowed. Faces, mouths and required gestures remain in the intended drawing area. Preserve appearance, eyelines and screen direction. A solo B becomes actor `0` within that shot, including dialogue and actions.
+
+Assign consecutive script beats to shots without duplicating/replaying lines. Inspect ordered contact sheets at every cut and action extreme. `inspectDocument`, `validate`, edits and previews warn about nearly identical adjacent shots. Inspection includes `coverage.cuts` with `fromShotId`, `toShotId`, `sameCast`, `similar`, and `scaleChangePercent`. The heuristic compares cast, staging, camera scale, target and angle; it cannot judge acting or artistic quality. It is advisory, leaves the document unchanged, and permits an intentional nonadjacent return wide. Resolve accidental warnings before delivering the default reference package.
 
 ## Discover before editing
 

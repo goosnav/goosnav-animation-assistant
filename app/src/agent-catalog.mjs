@@ -11,7 +11,7 @@ export const COMMANDS=Object.freeze({
  help:{arguments:'none',description:'Read the default reference-production workflow and list commands.'},
  instructions:{arguments:'none',description:'Read the default script, composition, visual review, reference export and file-delivery workflow. User instructions take precedence.'},
  status:{arguments:'none',description:'Return revision, progress, errors and image metadata without image bytes.'},
- validate:{arguments:'none',description:'Validate the accepted document without generating speech.'},
+ validate:{arguments:'none',description:'Validate the accepted document and review adjacent-shot coverage warnings without generating speech.'},
  preview:{arguments:'JSON options object (optional)',description:'Render PNG images and a contact sheet. Options: samples [{shotId,time}], maxDimension, contactSheet.'},
  patch:{arguments:'JSON array of {op:"set",path:"/JSON/pointer",value}',description:'Atomically apply up to 100 precise edits. Existing parent paths are required.'},
  frame:{arguments:'JSON object {shotId?,actors?:[0,1],region?:"body"|"head",padding?:0.05,time?:0}',description:'Fit a front camera to rendered model geometry. Preserve actors, dialogue and animation.'},
@@ -35,11 +35,11 @@ export function capabilities(){
    key:{target:{description:'actor:0, actor:1 or prop:<existing-ID>'},time:range(0,120),transition:{enum:['auto','ease','hold','wipe']},values:{description:'Actor or prop channel names and numeric values from this catalog.'}}
   },actions,commands:COMMANDS,operations:['agentInstructions','inspectDocument','editDocument','frameDocument','previewDocument','createAgentWorkspace'],
   api:{
-   inspectDocument:{text:'Scene or sequence JSON string; no speech or rendering'},
+   inspectDocument:{text:'Scene or sequence JSON string; no speech or rendering',returns:'Inspection and warnings; sequences include coverage.cuts with similar flags for near-identical adjacent cameras/cast.'},
    editDocument:{text:'JSON string',operations:'1–100 {op:"set",path:<absolute JSON pointer>,value:<JSON value>} objects; existing parents required'},
    previewDocument:{text:'JSON string',options:{samples:'1–12 {shotId?:string,time?:number} entries; multi-shot documents require shotId',maxDimension:range(128,1024,{type:'integer',default:640}),contactSheet:{type:'boolean',default:true},signal:'Optional AbortSignal',onProgress:'Optional ({phase,progress}) callback'},returns:'PNG data URLs plus shot/time/drawing identity and composition diagnostics'},
    frameDocument:{text:'JSON string',options:{shotId:'Required for multi-shot documents',actors:'Array of existing visible actor indices; default all',region:{enum:['head','body'],default:'body'},padding:range(0,.35,{default:.05}),time:range(0,120,{default:0}),signal:'Optional AbortSignal',onProgress:'Optional ({phase,progress}) callback'},returns:'Validated JSON text with only the chosen camera changed; front view with original projection'},
   },
-  diagnostics:{visibility:'Visible actor/head pixels measured by an occlusion-aware flat-color render. Bounds are projections of the posed model geometry.',limitations:'Pixel counts and framing bounds do not judge expression, readability, facing direction or artistic quality. Inspect the PNG images.'}
+  diagnostics:{coverage:'Sequence inspection warns about near-identical adjacent views. This is an advisory camera/cast/staging heuristic; compare rendered cut boundaries. A nonadjacent return wide is allowed.',visibility:'Visible actor/head pixels measured by an occlusion-aware flat-color render. Bounds are projections of the posed model geometry.',limitations:'Pixel counts and framing bounds do not judge expression, readability, facing direction or artistic quality. Inspect the PNG images.'}
  });
 }
