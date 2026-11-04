@@ -15,6 +15,9 @@ test('published entry pages expose the default workflow without visible panels o
    });
    assert.equal(discovery.status,200);assert.equal(discovery.workflow.defaultTask,'generate-reference-package');
    assert.deepEqual(discovery.workflow,discovery.api);assert.deepEqual(discovery.workflow,discovery.capabilities);
+   assert.equal(discovery.workflow.composition.format,'portrait');
+   assert.ok(discovery.directions.includes(discovery.workflow.composition.framing));
+   assert.ok(discovery.index.includes(discovery.workflow.composition.framing));
    assert.match(discovery.meta,/MP4.*JSON/);assert.match(discovery.directions,/Specific user instructions take precedence/);
    assert.match(discovery.directions,/Google Drive/);assert.match(discovery.directions,/actual paths/);
    for(const step of discovery.workflow.steps){assert.ok(discovery.directions.includes(step.instructions));assert.ok(discovery.index.includes(step.instructions));assert.ok(!discovery.visibleText.includes(step.instructions),'directions should not expand the normal GUI');}

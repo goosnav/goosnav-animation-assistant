@@ -59,7 +59,7 @@ export function editDocument(text,operations){
  }catch(error){return failure(error);}
 }
 
-export function sampleDocument(){return JSON.stringify({format:'goosnav-animation-config',version:1,title:'Agent composition study',scene:{format:'landscape',style:'flat',background:'#f8f5ee',count:2,camera:{projection:'perspective',azimuth:0,elevation:5,zoom:1,targetX:0,targetY:1},actors:[{model:'v12-fat',x:-.55,yaw:25},{model:'billy-v2',x:.55,yaw:-25}]},dialogue:[{actor:0,text:'First speaker.'},{actor:1,text:'Second speaker.'}],timing:{mode:'silent',duration:2,drawings:3}},null,2)+'\n';}
+export function sampleDocument(){return JSON.stringify({format:'goosnav-animation-config',version:1,title:'Agent composition study',scene:{format:'portrait',style:'flat',background:'#f8f5ee',count:2,camera:{projection:'perspective',azimuth:0,elevation:0,zoom:.938459,targetX:-.084864,targetY:.831262},actors:[{model:'v12-fat',x:-.55,yaw:25},{model:'billy-v2',x:.55,yaw:-25}]},dialogue:[{actor:0,text:'First speaker.'},{actor:1,text:'Second speaker.'}],timing:{mode:'silent',duration:2,drawings:3}},null,2)+'\n';}
 
 function previewOptions(options){
  allowed(options,['samples','maxDimension','contactSheet','signal','onProgress'],'Preview options');
@@ -117,7 +117,7 @@ export async function frameDocument(text,options={}){
  try{
   allowed(options,['shotId','actors','region','padding','time','signal','onProgress'],'Framing options');
   callbacks(options);
-  const region=options.region??'body',padding=options.padding??.12;if(!['head','body'].includes(region))invalid('region must be head or body.');number(padding,0,.35,'padding');number(options.time??0,0,120,'time');
+  const region=options.region??'body',padding=options.padding??.05;if(!['head','body'].includes(region))invalid('region must be head or body.');number(padding,0,.35,'padding');number(options.time??0,0,120,'time');
   const parsed=parse(text),source=chooseShot(parsed.shots,options.shotId),actors=options.actors??Array.from({length:source.project.scene.count},(_,i)=>i);
   if(!Array.isArray(actors)||!actors.length||actors.length>2||new Set(actors).size!==actors.length||actors.some(i=>!Number.isInteger(i)||i<0||i>=source.project.scene.count))invalid('actors must contain existing visible actor indices, once each.');
   options.signal?.throwIfAborted();const document=await prepared(text,parsed,options),shot=chooseShot(document.shots,source.id),time=options.time??0;number(time,0,shot.scene.clip.duration,'time');

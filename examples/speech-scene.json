@@ -3,7 +3,8 @@
   "version": 1,
   "title": "A perfectly ordinary chair",
   "scene": {
-    "format": "landscape",
+    "format": "portrait",
+    "camera": {"elevation": 0, "zoom": 0.78, "targetX": -0.13, "targetY": 0.66},
     "actors": [
       {"model": "v12", "x": -0.6, "yaw": 35, "pose": "sitting", "chair": "wood", "emotion": "happy"},
       {"model": "v12-fat-glasses", "x": 0.6, "yaw": -35, "pose": "sitting", "chair": "folding", "emotion": "skeptical"}

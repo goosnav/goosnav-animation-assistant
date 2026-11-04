@@ -10,6 +10,8 @@ Read [/AGENTS.md](/AGENTS.md) first. Unless the user gives a different task, dev
 
 The full guidance is also in `/llms.txt`, the nonvisual `#agent-workflow` JSON element on both entry pages, `capabilities().workflow`, `agentInstructions()`, and the `instructions`/`help` commands. `status()` points to the same instructions without repeating them on every poll. Reading instructions never starts generation or uploads files.
 
+Default to **Reels, 1080 × 1920 (9:16)**: `scene.format: "portrait"` in every shot. Use landscape when the user asks. Frame the cast large and centered; minimize negative space and balance the top/bottom and left/right margins. Keep the intended poses, heads, hands, feet and required props within the drawing area throughout the action. Start with a body camera fit (default 5% padding), inspect the pixels at motion extremes, then adjust staging and camera for a stable shot.
+
 ## Discover before editing
 
 ```js
@@ -109,7 +111,7 @@ const fitted = await api.frameDocument(text, {
   shotId: 'b-close', // omit only for a single scene/shot
   actors: [1],      // default: every visible actor
   region: 'head',   // 'head' or 'body'; default 'body'
-  padding: 0.12,    // fraction per edge, 0–0.35
+  padding: 0.05,    // fraction per edge, 0–0.35
   time: 0          // shot-local pose to measure
 });
 ```

@@ -1,5 +1,7 @@
 # Goosnav Animation Assistant
 
+Default format: Reels (portrait 9:16, 1080 × 1920). Use landscape only when requested. Frame characters large and centered, minimize negative space, balance top/bottom and left/right margins, and preserve the complete intended pose and action without accidental cropping. Use frameDocument with body fit and 5% padding as a starting point; inspect the rendered images at action extremes.
+
 Default task for an agent: develop or use the user’s script, compose creative and drawable scenes, inspect real rendered previews, export the reference MP4 AND its matching JSON, and verify delivery to the user’s cloud/computer folder (save locally when unspecified). Specific user instructions override this default. Full operating directions are below and at /AGENTS.md.
 
 Local, deterministic animation authoring with editable scene/sequence JSON and real rendered image feedback.

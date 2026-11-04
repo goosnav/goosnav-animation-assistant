@@ -20,6 +20,30 @@ async function openWorkspace(){
  }catch(error){await browser.close();throw error;}
 }
 
+test('Reels camera fit fills the available frame and balances margins without cropping',async()=>{
+ const {browser,page}=await openWorkspace();try{
+  const result=await page.evaluate(async()=>{
+   const api=await import('/agent-api.mjs'),config=JSON.parse(api.sampleDocument());config.scene.format='portrait';
+   // An off-center character and an unequal-height pair must both be centered by the fit.
+   const images=[];
+   for(const actors of [[{model:'v12-fat',x:1.2,yaw:20}],config.scene.actors]){
+    const text=JSON.stringify({...config,dialogue:config.dialogue.filter(line=>line.actor<actors.length),scene:{...config.scene,count:actors.length,actors}});
+    const fitted=await api.frameDocument(text),preview=await api.previewDocument(fitted.text,{maxDimension:640});
+    images.push(preview.images[0]);
+   }
+   return images;
+  });
+  for(const [index,image]of result.entries()){
+   const bounds=image.diagnostics.actors.map(actor=>actor.bounds),left=Math.min(...bounds.map(b=>b.left)),right=Math.max(...bounds.map(b=>b.right)),top=Math.min(...bounds.map(b=>b.top)),bottom=Math.max(...bounds.map(b=>b.bottom));
+   assert.ok(image.diagnostics.actors.every(a=>!a.clipped&&a.head.visible));
+   assert.ok(Math.max(right-left,bottom-top)>=.87,`characters should fill at least 87% of the limiting dimension: ${JSON.stringify(bounds)}`);
+   assert.ok(Math.abs(top-(1-bottom))<.04,'top and bottom margins should balance');
+   assert.ok(Math.abs(left-(1-right))<.04,'left and right margins should balance');
+   await fs.writeFile(`.work/reels-fit-${index}.png`,Buffer.from(image.dataURL.split(',')[1],'base64'));
+  }
+ }finally{await browser.close();}
+});
+
 test('agent previews contain actual posed pixels, precise edits change pixels, and geometry framing retains B identity',async()=>{
  const {browser,page}=await openWorkspace();try{
   const result=await page.evaluate(async()=>{
@@ -36,6 +60,10 @@ test('agent previews contain actual posed pixels, precise edits change pixels, a
   });
   assert.equal(result.before.ok,true);assert.equal(result.after.ok,true);assert.equal(result.close.ok,true);
   const a=result.before.images[0],b=result.after.images[0];assert.match(a.dataURL,/^data:image\/png;base64,/);assert.notEqual(a.dataURL,b.dataURL);
+  assert.ok(a.height>a.width,'starter uses Reels');
+  assert.ok(a.diagnostics.actors.every(actor=>!actor.clipped),'starter keeps the full cast inside the frame');
+  const starterBounds=a.diagnostics.actors.map(actor=>actor.bounds);
+  assert.ok(Math.abs(Math.min(...starterBounds.map(b=>b.top))-(1-Math.max(...starterBounds.map(b=>b.bottom))))<.04,'starter balances space above and below the cast');
   assert.ok(a.diagnostics.actors.every(a=>a.visiblePixels>20&&a.head.visiblePixels>10));
   assert.equal(result.invisible.images[0].diagnostics.actors[1].visiblePixels,0);assert.equal(result.invisible.images[0].diagnostics.actors[1].head.visiblePixels,0);
   assert.ok(result.occlusion.images[0].diagnostics.actors[1].head.visiblePixels<a.diagnostics.actors[1].head.visiblePixels,'front actor occludes part of rear actor head');

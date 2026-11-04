@@ -6,6 +6,14 @@ import {parseSequenceDocument} from '../app/src/sequence-config.mjs';
 
 const scene=()=>JSON.stringify({format:'goosnav-animation-config',version:1,title:'Two speakers',scene:{format:'landscape',actors:[{model:'v12-fat',x:-.6},{model:'billy-v2',x:.6}]},timing:{mode:'silent',duration:2},dialogue:[{actor:1,text:'Still B.'}]});
 
+test('agent starter and machine-readable defaults use Reels',()=>{
+ assert.equal(JSON.parse(sampleDocument()).scene.format,'portrait');
+ const catalog=capabilities();
+ assert.equal(catalog.parameters.scene.format.default,'portrait');
+ assert.equal(catalog.workflow.composition.format,'portrait');
+ assert.deepEqual(catalog.workflow.composition.dimensions,[1080,1920]);
+});
+
 test('agent catalog exposes accepted model, channel and action parameters usable by strict parsing',()=>{
  const catalog=capabilities();
  for(const model of catalog.models){const data=JSON.parse(scene());data.scene.actors[0].model=model.id;assert.equal(inspectDocument(JSON.stringify(data)).ok,true);}

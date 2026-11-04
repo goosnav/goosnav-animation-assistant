@@ -2,7 +2,7 @@
   "format": "goosnav-animation-config",
   "version": 1,
   "title": "Walk and wave",
-  "scene": {"format": "landscape", "actors": [{"model": "blue", "x": -0.6, "yaw": 90, "emotion": "happy"}]},
+  "scene": {"format": "portrait", "camera": {"elevation": 0, "zoom": 0.9, "targetX": 0.1, "targetY": 0.875}, "actors": [{"model": "blue", "x": -0.6, "yaw": 90, "emotion": "happy"}]},
   "timing": {"mode": "silent", "duration": 5, "drawings": 3},
   "actions": [
     {"actor": 0, "action": "walk", "time": 0, "options": {"steps": 4, "stride": 0.3, "cadence": 2, "direction": 90}},
