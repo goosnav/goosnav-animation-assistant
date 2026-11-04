@@ -9,6 +9,9 @@ import {compositionDiagnostics,fittedCamera} from './agent-composition.mjs';
 import {capabilities,LIMITS,COMMANDS} from './agent-catalog.mjs';
 import {agentInstructions} from './agent-workflow.mjs';
 import {reviewCoverage} from './agent-coverage.mjs';
+import {resetSectionValues} from './pose-sections.mjs';
+import {resetProjectSection,applyProjectPose} from './pose-editing.mjs';
+import {alignGaze,gazeDiagnostics} from './gaze-alignment.mjs';
 export {capabilities,agentInstructions};
 
 const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
@@ -62,6 +65,93 @@ export function editDocument(text,operations){
  }catch(error){return failure(error);}
 }
 
+function shotOption(options){if(options.shotId!==undefined&&typeof options.shotId!=='string')invalid('shotId must be a string.');}
+function resetOptions(options){
+ allowed(options,['shotId','target','section','scope','time'],'Reset options');shotOption(options);
+ const scope=options.scope===undefined?'scene':options.scope,time=options.time===undefined?0:options.time;
+ if(!['scene','key','timeline'].includes(scope))invalid('Reset scope must be scene, key or timeline.');number(time,0,120,'time');
+ if(typeof options.target!=='string')invalid('Choose an actor, prop or camera target.');
+ if(options.section!==undefined&&typeof options.section!=='string')invalid('section must be a section ID.');
+ return {...options,scope,time};
+}
+function actorOptions(actors,count){
+ if(!Array.isArray(actors)||!actors.length||actors.length>2||new Set(actors).size!==actors.length||actors.some(i=>!Number.isInteger(i)||i<0||i>=count))invalid('actors must contain existing visible actor indices, once each.');
+}
+function alignmentOptions(options){
+ allowed(options,['shotId','actors','target','turnBody','scope','time','signal','onProgress'],'Alignment options');shotOption(options);callbacks(options);
+ const scope=options.scope===undefined?'key':options.scope,time=options.time===undefined?0:options.time,target=options.target===undefined?'partner':options.target,turnBody=options.turnBody===undefined?true:options.turnBody;
+ if(!['scene','key'].includes(scope))invalid('Alignment scope must be scene or key.');number(time,0,120,'time');
+ if(typeof turnBody!=='boolean')invalid('turnBody must be a boolean.');
+ if(options.actors!==undefined)actorOptions(options.actors,2);
+ if(target!=='partner'&&target!=='camera'){
+  allowed(target,['point'],'Gaze target');
+  if(!Array.isArray(target.point)||target.point.length!==3||!target.point.every(value=>Number.isFinite(value)&&Math.abs(value)<=Number.MAX_SAFE_INTEGER))invalid('Gaze point must contain three finite world coordinates within the safe numeric range.');
+ }
+ return {...options,scope,time,target,turnBody};
+}
+function configFor(parsed,source){return parsed.kind==='sequence'?parsed.data.shots[parsed.shots.indexOf(source)].config:parsed.data;}
+function writePoseValues(config,project,target,values){
+ config.scene??={};
+ if(target==='camera'){config.scene.camera=structuredClone(values);return;}
+ if(target.startsWith('actor:')){
+  const index=Number(target.slice(6));config.scene.actors??=Array.from({length:project.scene.count},()=>({}));
+  while(config.scene.actors.length<=index)config.scene.actors.push({});
+  Object.assign(config.scene.actors[index],values);
+ }else{
+  const id=target.slice(5),index=project.scene.props.findIndex(prop=>prop.id===id);
+  config.scene.props??=structuredClone(project.scene.props);
+  Object.assign(config.scene.props[index],values);
+ }
+}
+function materializeProps(config,project){
+ // Book/goose actions can create props. Keep their interpreted IDs when saving
+ // expanded keys, while preserving every explicit field on existing raw props.
+ if(!project.scene.props?.length)return;
+ config.scene??={};config.scene.props??=[];
+ project.scene.props.forEach((prop,index)=>{if(config.scene.props[index])config.scene.props[index].id??=prop.id;else config.scene.props.push(structuredClone(prop));});
+}
+function poseResult(parsed,source,before,{project,warnings=[]},{scope,changes=[],clearHeadActor}={}){
+ const config=configFor(parsed,source);
+ if(scope!=='key')for(const {target,values} of changes)writePoseValues(config,project,target,values);
+ if(scope==='key'||scope==='timeline'){
+  config.keys=structuredClone(animationSettings(project).keys);delete config.actions;materializeProps(config,project);
+  if(animationSettings(project).duration>animationSettings(before).duration){config.timing??={};config.timing.duration=animationSettings(project).duration;}
+ }
+ if(clearHeadActor!==undefined)for(const line of config.dialogue??[])if(line.actor===clearHeadActor&&Object.hasOwn(line,'headYaw'))line.headYaw=0;
+ const next=JSON.stringify(parsed.data,null,2)+'\n',inspection=inspectDocument(next);if(!inspection.ok)return inspection;
+ if(config.handoff||parsed.data.handoff)warnings=[...warnings,'Pose edits retain the exported handoff. Create new drawing references before importing artwork.'];
+ return {...inspection,text:next,inspection,warnings:[...new Set([...inspection.warnings,...warnings])]};
+}
+
+/** Atomic numeric section edit; retains original raw audio and carrier metadata. */
+export function resetDocument(text,options={}){
+ try{
+  options=resetOptions(options);const parsed=parse(text),source=chooseShot(parsed.shots,options.shotId),before=source.project;
+  const result=resetProjectSection(before,options),kind=options.target.startsWith('actor:')?'actor':'prop';
+  const values=options.target==='camera'?result.project.scene.camera:resetSectionValues(kind,options.section);
+  return {...poseResult(parsed,source,before,result,{scope:options.scope,changes:[{target:options.target,values}],...(options.scope==='timeline'&&kind==='actor'&&Object.hasOwn(values,'headYaw')?{clearHeadActor:Number(options.target.slice(6))}:{})}),reset:{shotId:source.id,target:options.target,section:options.section??'camera',scope:options.scope,time:options.time}};
+ }catch(error){return failure(error);}
+}
+
+/** Browser operation: solve against the actual posed rig, then author one edit. */
+export async function alignDocument(text,options={}){
+ let stage,canvas;
+ try{
+  options=alignmentOptions(options);options.signal?.throwIfAborted();
+  const parsed=parse(text),source=chooseShot(parsed.shots,options.shotId),actors=options.actors??Array.from({length:source.project.scene.count},(_,i)=>i);actorOptions(actors,source.project.scene.count);
+  const scene=await prepareScene(JSON.stringify(configFor(parsed,source)),{signal:options.signal,onProgress:options.onProgress,allowNewDrawings:true}),time=options.time;number(time,0,scene.clip.duration,'time');
+  options.signal?.throwIfAborted();const slot=slotAt(scene.clip,Math.min(time,Math.max(0,scene.clip.duration-1e-7))),[width,height]=size(scene.project,320);
+  const state=options.scope==='scene'?{scene:structuredClone(scene.project.scene),mouths:['rest','rest'],blinks:[false,false]}:slot.state;
+  canvas=globalThis.document.createElement('canvas');stage=new Stage(canvas);await stage.prepare(state.scene);options.signal?.throwIfAborted();stage.draw(state,width,height);
+  const fit=alignGaze(stage,{actors,target:options.target,turnBody:options.turnBody});options.signal?.throwIfAborted();
+  const alignment={shotId:source.id,actors,target:options.target,turnBody:options.turnBody,scope:options.scope,time,changes:fit.changes,diagnostics:fit.diagnostics};
+  if(!fit.changes.length){const inspection=summary(parsed);return {...inspection,text,inspection,warnings:[...new Set([...inspection.warnings,...fit.warnings])],alignment};}
+  const edited=applyProjectPose(scene.project,{changes:fit.changes,scope:options.scope,time});edited.warnings.push(...fit.warnings);
+  const result=poseResult(parsed,source,scene.project,edited,{scope:options.scope,changes:fit.changes.map(change=>({target:`actor:${change.actor}`,values:change.values}))});
+  options.signal?.throwIfAborted();return {...result,alignment};
+ }catch(error){return failure(error);}finally{release(stage,canvas);}
+}
+
 export function sampleDocument(){return JSON.stringify({format:'goosnav-animation-config',version:1,title:'Agent composition study',scene:{format:'portrait',style:'flat',background:'#f8f5ee',count:2,camera:{projection:'perspective',azimuth:0,elevation:0,zoom:.938459,targetX:-.084864,targetY:.831262},actors:[{model:'v12-fat',x:-.55,yaw:25},{model:'billy-v2',x:.55,yaw:-25}]},dialogue:[{actor:0,text:'First speaker.'},{actor:1,text:'Second speaker.'}],timing:{mode:'silent',duration:2,drawings:3}},null,2)+'\n';}
 
 function previewOptions(options){
@@ -105,7 +195,7 @@ export async function previewDocument(text,options={}){
    options.signal?.throwIfAborted();const shot=chooseShot(document.shots,sample.shotId),scene=shot.scene,time=sample.time??0;
    number(time,0,scene.clip.duration,'Sample time');const slot=slotAt(scene.clip,Math.min(time,Math.max(0,scene.clip.duration-1e-7))),[width,height]=size(scene.project,options.maxDimension);
    await stage.prepare(slot.state.scene);options.signal?.throwIfAborted();stage.draw(slot.state,width,height,{guides:scene.project.guides});
-   const diagnostics=compositionDiagnostics(stage,width,height),drawingId=parsed.kind==='sequence'?`${shot.id}:${slot.id}`:slot.id;
+   const diagnostics={...compositionDiagnostics(stage,width,height),gaze:gazeDiagnostics(stage)},drawingId=parsed.kind==='sequence'?`${shot.id}:${slot.id}`:slot.id;
    images.push(await pngResult(canvas,{kind:'frame',shotId:shot.id,title:shot.title,time,globalTime:(shot.startFrame||0)/24+time,frame:Math.min(scene.clip.totalFrames-1,Math.floor(time*24)),drawingId,label:`${shot.id==='scene'?'Scene':shot.title} · ${time.toFixed(2)} s · ${drawingId}`,diagnostics}));
    if(scene.needsReferences)warnings.push(`${shot.id}: changes require new drawing references.`);
    options.onProgress?.({phase:'Rendering previews',progress:(index+1)/samples.length});await tick();
@@ -144,13 +234,14 @@ export function createAgentWorkspace({text=sampleDocument(),onChange=()=>{},onRe
  function load(next){if(disposed)return failure(Error('Workspace is disposed.'));const result=inspectDocument(next);return result.ok?accept(next,result):report(result);}
  function validate(){return report(inspectDocument(currentText));}
  function edit(operations){const result=editDocument(currentText,operations);return result.ok?accept(result.text,result):report(result);}
+ function reset(options={}){if(disposed)return failure(Error('Workspace is disposed.'));const result=resetDocument(currentText,options);return result.ok?accept(result.text,result):report(result);}
  async function run(kind,options){
   if(disposed)return failure(Error('Workspace is disposed.'));
-  try{if(kind==='preview')previewOptions(options);else{allowed(options,['shotId','actors','region','padding','time','signal','onProgress'],'Framing options');callbacks(options);}}catch(error){return report(failure(error));}
+  try{if(kind==='preview')previewOptions(options);else if(kind==='align')alignmentOptions(options);else{allowed(options,['shotId','actors','region','padding','time','signal','onProgress'],'Framing options');callbacks(options);}}catch(error){return report(failure(error));}
   cancel();const active=controller=new AbortController(),ticket=job,atRevision=revision,signal=active.signal,externalAbort=()=>active.abort();
   options.signal?.addEventListener('abort',externalAbort,{once:true});if(options.signal?.aborted)active.abort();
-  busy=true;progress={phase:kind==='preview'?'Preparing previews':'Preparing framing',progress:0};errors=[];notify();
-  let result;try{result=await (kind==='preview'?previewDocument:frameDocument)(currentText,{...options,signal,onProgress:value=>{if(ticket===job){progress=value;notify();options.onProgress?.(value);}}});}finally{options.signal?.removeEventListener('abort',externalAbort);}
+  busy=true;progress={phase:kind==='preview'?'Preparing previews':kind==='align'?'Preparing gaze alignment':'Preparing framing',progress:0};errors=[];notify();
+  let result;try{result=await ({preview:previewDocument,frame:frameDocument,align:alignDocument}[kind])(currentText,{...options,signal,onProgress:value=>{if(ticket===job){progress=value;notify();options.onProgress?.(value);}}});}finally{options.signal?.removeEventListener('abort',externalAbort);}
   if(ticket!==job)return failure(new DOMException('Cancelled','AbortError'));
   controller=null;busy=false;progress=null;
   if(signal.aborted)return report(failure(new DOMException('Cancelled','AbortError')));
@@ -167,17 +258,18 @@ export function createAgentWorkspace({text=sampleDocument(),onChange=()=>{},onRe
    }
    if(typeof input!=='string'){
     allowed(input,['command','options','operations'],'Command');name=input.command;
-    if(Object.hasOwn(input,'operations')&&name!=='patch'||Object.hasOwn(input,'options')&&!['preview','frame'].includes(name))invalid('Unexpected command arguments.');args=name==='patch'?input.operations:input.options;
+    if(Object.hasOwn(input,'operations')&&name!=='patch'||Object.hasOwn(input,'options')&&!['preview','frame','reset','align'].includes(name))invalid('Unexpected command arguments.');args=name==='patch'?input.operations:input.options;
    }
    if(typeof name!=='string'||!Object.hasOwn(COMMANDS,name))invalid('Unknown command. Run help for the allowlist.');
-   if(!['patch','preview','frame'].includes(name)&&args!==undefined)invalid(`${name} takes no arguments.`);
+   if(!['patch','preview','frame','reset','align'].includes(name)&&args!==undefined)invalid(`${name} takes no arguments.`);
    if(name==='help')return {ok:true,workflow:agentInstructions(),commands:structuredClone(COMMANDS)};
    if(name==='instructions')return instructions();
    if(name==='status')return status();if(name==='validate')return validate();if(name==='cancel')return cancel();if(name==='exportJSON')return {ok:true,text:currentText,revision};if(name==='patch')return edit(args);
-   if(name==='preview'){previewOptions(args??{});return run('preview',args??{});}return run('frame',args??{});
+   if(name==='reset')return reset(args===undefined?{}:args);
+   if(name==='preview'){previewOptions(args??{});return run('preview',args??{});}return run(name==='align'?'align':'frame',args===undefined?{}:args);
   }catch(error){return report(failure(error));}
  }
  const instructions=()=>({ok:true,workflow:agentInstructions()});
  const initial=inspectDocument(text);if(!initial.ok)throw Error(initial.errors[0].message);currentText=text;revision=1;
- return {status,instructions,load,validate,edit,frame:options=>run('frame',options??{}),preview:options=>run('preview',options??{}),exportJSON:()=>({ok:true,text:currentText,revision}),command,cancel,dispose(){cancel();disposed=true;lastPreview=null;}};
+ return {status,instructions,load,validate,edit,reset,align:(options={})=>run('align',options),frame:options=>run('frame',options??{}),preview:options=>run('preview',options??{}),exportJSON:()=>({ok:true,text:currentText,revision}),command,cancel,dispose(){cancel();disposed=true;lastPreview=null;}};
 }

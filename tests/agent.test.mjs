@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {capabilities,inspectDocument,editDocument,createAgentWorkspace,sampleDocument} from '../app/src/agent-api.mjs';
+import {capabilities,inspectDocument,editDocument,resetDocument,alignDocument,createAgentWorkspace,sampleDocument} from '../app/src/agent-api.mjs';
 import {prepareSequence,sequenceJSON} from '../app/src/sequence.mjs';
 import {parseSequenceDocument} from '../app/src/sequence-config.mjs';
+import {parseConfigDocument} from '../app/src/config.mjs';
 
 const scene=()=>JSON.stringify({format:'goosnav-animation-config',version:1,title:'Two speakers',scene:{format:'landscape',actors:[{model:'v12-fat',x:-.6},{model:'billy-v2',x:.6}]},timing:{mode:'silent',duration:2},dialogue:[{actor:1,text:'Still B.'}]});
 
@@ -112,4 +113,71 @@ test('agent help and instructions expose the reference-delivery default without 
  assert.deepEqual(workspace.exportJSON(),before);assert.deepEqual(workspace.status().artifacts,[]);
  workflow.steps[0].instructions='corrupted caller copy';assert.notDeepEqual(workspace.instructions().workflow,workflow);
  assert.equal((await workspace.command('instructions {}')).ok,false);workspace.dispose();
+});
+
+const poseRecipe=()=>({format:'goosnav-animation-config',version:1,title:'Pose isolation',scene:{actors:[{model:'v12-fat',pose:'point',emotion:'happy',headPitch:-35,armL:72,armR:55},{model:'billy-v2',headYaw:-12}],props:[{id:'book',kind:'book',x:2,rx:30,width:.9,height:1.2,depth:.1,open:.75}]},timing:{mode:'silent',duration:2},audio:{mode:'recording',offset:.25,trimStart:.5,trimEnd:1.5},dialogue:[{actor:0,text:'Look here.',headYaw:45,pose:'point',emotion:'happy'},{actor:1,text:'My turn.',headYaw:-30}],keys:[{id:'mixed',target:'actor:0',time:1,transition:'ease',values:{headPitch:-30,armL:80,armR:65}},{id:'partner',target:'actor:1',time:1.5,transition:'hold',values:{headYaw:22}},{id:'last-head',target:'actor:0',time:4,transition:'hold',values:{headYaw:60}},{id:'book-key',target:'prop:book',time:1,transition:'ease',values:{open:1}}]});
+
+test('agent scene reset preserves raw audio, keys, held pose and unrelated actor/prop fields',()=>{
+ const input=poseRecipe(),result=resetDocument(JSON.stringify(input),{target:'actor:0',section:'head'});
+ assert.equal(result.ok,true,JSON.stringify(result.errors));assert.equal(result.inspection.ok,true);
+ const data=JSON.parse(result.text);
+ assert.deepEqual(data,{...input,scene:{...input.scene,actors:[{...input.scene.actors[0],headYaw:0,headPitch:0,headTilt:0,headSpin:0,noseContact:0},input.scene.actors[1]]}});
+ assert.ok(result.warnings.some(message=>/key/i.test(message)));assert.ok(result.warnings.some(message=>/dialogue/i.test(message)));
+ const camera=resetDocument(JSON.stringify(input),{target:'camera'});assert.equal(camera.ok,true);assert.deepEqual(JSON.parse(camera.text).scene.actors,input.scene.actors);
+ const prop=resetDocument(JSON.stringify(input),{target:'prop:book',section:'dimensions'});assert.equal(prop.ok,true);assert.deepEqual(JSON.parse(prop.text).scene.props,[{...input.scene.props[0],width:.3,height:.4,depth:.05}]);
+});
+
+test('agent key reset merges one section at the selected time without rewriting scene or other keys',()=>{
+ const input=poseRecipe(),result=resetDocument(JSON.stringify(input),{target:'actor:0',section:'left-arm',scope:'key',time:1.001});
+ assert.equal(result.ok,true,JSON.stringify(result.errors));const data=JSON.parse(result.text),key=data.keys.find(k=>k.id==='mixed');
+ assert.equal(key.time,1);assert.equal(key.transition,'ease');assert.equal(key.values.headPitch,-30);assert.equal(key.values.armR,65);assert.equal(key.values.armL,0);assert.equal(key.values.contactLeft,0);
+ assert.deepEqual(data.scene,input.scene);assert.deepEqual(data.audio,input.audio);assert.deepEqual(data.dialogue,input.dialogue);
+ const byId=keys=>[...keys].sort((a,b)=>a.id.localeCompare(b.id));assert.deepEqual(byId(data.keys.filter(k=>k.id!=='mixed')),byId(input.keys.filter(k=>k.id!=='mixed')));assert.deepEqual(data.timing,input.timing);
+});
+
+test('agent timeline reset clears only selected head contributions and preserves final exposure duration',()=>{
+ const input=poseRecipe(),result=resetDocument(JSON.stringify(input),{target:'actor:0',section:'head',scope:'timeline'});
+ assert.equal(result.ok,true,JSON.stringify(result.errors));const data=JSON.parse(result.text);
+ assert.deepEqual(data.keys.find(k=>k.id==='mixed'),{...input.keys[0],values:{armL:80,armR:65}});assert.ok(!data.keys.some(k=>k.id==='last-head'));
+ assert.deepEqual(data.keys.filter(k=>k.target!=='actor:0'),input.keys.filter(k=>k.target!=='actor:0'));
+ assert.equal(data.dialogue[0].headYaw,0);assert.deepEqual(data.dialogue[1],input.dialogue[1]);assert.deepEqual(data.audio,input.audio);
+ assert.equal(data.timing.duration,97/24);assert.equal(data.scene.actors[0].pose,'point');assert.equal(data.scene.actors[0].emotion,'happy');
+});
+
+test('pose key edits materialize actions once and retain unrelated actions and generated book props',()=>{
+ const input=poseRecipe();delete input.keys;input.actions=[{actor:0,action:'read',time:0,duration:1},{actor:1,action:'wave',time:1,duration:1}];
+ const before=parseConfigDocument(JSON.stringify(input)).project;
+ const result=resetDocument(JSON.stringify(input),{target:'actor:0',section:'head',scope:'key',time:0});
+ assert.equal(result.ok,true,JSON.stringify(result.errors));const data=JSON.parse(result.text),after=parseConfigDocument(result.text).project;
+ assert.equal(data.actions,undefined);assert.ok(data.keys.length>8);assert.equal(after.animation.keys.length,data.keys.length,'expanded actions must not run a second time');
+ const signature=keys=>keys.filter(k=>k.target==='actor:1').map(({id,...key})=>key);
+ assert.deepEqual(signature(after.animation.keys),signature(before.animation.keys));
+ const book=data.scene.props.find(prop=>prop.kind==='book');assert.ok(data.keys.some(key=>key.target===`prop:${book.id}`));assert.deepEqual(data.audio,input.audio);
+ const generated={...input,scene:{...input.scene,props:[]}},created=resetDocument(JSON.stringify(generated),{target:'actor:0',section:'head',scope:'key',time:0});
+ assert.equal(created.ok,true,JSON.stringify(created.errors));const createdData=JSON.parse(created.text);assert.equal(createdData.scene.props.length,1);assert.ok(createdData.keys.some(key=>key.target===`prop:${createdData.scene.props[0].id}`));
+});
+
+test('pose edits select the original nested sequence config and retain exported handoff metadata',async()=>{
+ const input={format:'goosnav-animation-sequence',version:1,id:'film',title:'Pose film',shots:[{id:'a',title:'A',config:poseRecipe()},{id:'b',title:'B',config:poseRecipe()}]};
+ const text=sequenceJSON(await prepareSequence(JSON.stringify(input))),before=JSON.parse(text);
+ before.shots[1].config.audio={mode:'recording',offset:.25,trimStart:.5,trimEnd:1.5};
+ const result=resetDocument(JSON.stringify(before),{shotId:'b',target:'actor:0',section:'head',scope:'timeline'});
+ assert.equal(result.ok,true,JSON.stringify(result.errors));const after=JSON.parse(result.text);
+ assert.deepEqual(after.shots[0],before.shots[0]);assert.equal(after.shots[1].config.scene.actors[0].headPitch,0);assert.equal(after.shots[1].config.dialogue[0].headYaw,0);
+ assert.deepEqual(after.handoff,before.handoff);assert.deepEqual(after.shots[1].config.handoff,before.shots[1].config.handoff);assert.deepEqual(after.shots[1].config.audio,before.shots[1].config.audio);
+ assert.ok(result.warnings.some(message=>/new.*references/i.test(message)));
+ assert.equal(resetDocument(JSON.stringify(input),{target:'actor:0',section:'head'}).ok,false,'multiple shots require an exact selection');
+});
+
+test('pose commands are strictly bounded and invalid edits leave the accepted document and revision intact',async()=>{
+ const text=JSON.stringify(poseRecipe()),workspace=createAgentWorkspace({text}),before=workspace.exportJSON();
+ for(const options of [null,{target:'actor:0',section:'head',all:true},{target:'actor:2',section:'head'},{target:'prop:missing',section:'position'},{target:'actor:0',section:'unknown'},{target:'actor:0',section:'head',scope:'all'},{target:'actor:0',section:'head',time:NaN},{target:'camera',scope:'timeline'},{target:'actor:0',section:'head',shotId:9}])assert.equal(resetDocument(text,options).ok,false);
+ for(const options of [null,{actors:[]},{actors:[0,0]},{actors:[2]},{turnBody:1},{target:{point:[1,2]}},{target:{point:[1,2,3],extra:true}},{scope:'timeline'},{time:Infinity},{surprise:true}])assert.equal((await alignDocument(text,options)).ok,false);
+ for(const command of ['reset {"target":"actor:0","section":"all"}','align {"actors":[]}',{command:'reset',operations:[]},{command:'align',options:{eval:true}}])assert.equal((await workspace.command(command)).ok,false);
+ assert.deepEqual(workspace.exportJSON(),before);
+ assert.equal(workspace.reset({target:'actor:0',section:'head'}).ok,true);assert.equal(workspace.status().revision,before.revision+1);
+ assert.equal((await workspace.command({command:'reset',options:{target:'actor:0',section:'left-arm',scope:'key',time:1}})).ok,true);
+ assert.ok(capabilities().operations.includes('resetDocument'));assert.ok(capabilities().operations.includes('alignDocument'));
+ assert.ok(capabilities().poseSections.actor.head.keys.includes('headPitch'));assert.ok(capabilities().commands.align);assert.ok(capabilities().commands.reset);
+ workspace.dispose();
 });

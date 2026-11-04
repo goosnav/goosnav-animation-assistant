@@ -46,8 +46,26 @@ function actor(source,name=''){
  teeth.position.set(0,headPosition.y+.028,.151);root.add(teeth);root.updateMatrixWorld(true);head.attach(teeth);teeth.visible=false;
  const effects=actorEffects(root,bones);
  const contacts=bodyPoses(root,bones);
+ // Imported head bones do not share the application's XYZ frame. Calibrate
+ // authored +Z/+Y once, then carry those axes with the posed head. A neck-to-
+ // nose vector points upward and cannot serve as a character's gaze direction.
+ root.updateMatrixWorld(true);
+ const headInverse=head.getWorldQuaternion(new THREE.Quaternion()).invert(),rootQuaternion=root.getWorldQuaternion(new THREE.Quaternion());
+ const faceForward=new THREE.Vector3(0,0,1).applyQuaternion(rootQuaternion).applyQuaternion(headInverse),faceUp=new THREE.Vector3(0,1,0).applyQuaternion(rootQuaternion).applyQuaternion(headInverse);
+ const eyePositions=['eyeL','eyeR'].map(n=>bones[n]?.getWorldPosition(new THREE.Vector3())).filter(Boolean);
+ if(!eyePositions.length)root.traverse(mesh=>{
+  if(!mesh.isMesh||!/(?:^|_)eye(?:[._]|$)/i.test(mesh.name))return;
+  const attribute=mesh.geometry.attributes.position,center=new THREE.Vector3();
+  for(let i=0;i<attribute.count;i++){const point=new THREE.Vector3().fromBufferAttribute(attribute,i);if(mesh.isSkinnedMesh)mesh.applyBoneTransform(i,point);center.add(point.applyMatrix4(mesh.matrixWorld));}
+  if(attribute.count)eyePositions.push(center.divideScalar(attribute.count));
+ });
+ const faceOrigin=head.worldToLocal(eyePositions.length?eyePositions.reduce((a,b)=>a.add(b),new THREE.Vector3()).divideScalar(eyePositions.length):effects.noseTip());
  function pose(name,x=0,y=0,z=0){if(bones[name])bones[name].quaternion.copy(rest[name].q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(x,y,z)));}
- return {root,bones,noseTip:effects.noseTip,get seat(){return contacts.seat;},apply(a,mouth='rest',blink=false,style='flat',smearFrom=null){
+ return {root,bones,noseTip:effects.noseTip,faceFrame(){
+  root.updateMatrixWorld(true);
+  const forward=faceForward.clone().transformDirection(head.matrixWorld),up=faceUp.clone().transformDirection(head.matrixWorld);up.addScaledVector(forward,-up.dot(forward)).normalize();
+  return {origin:head.localToWorld(faceOrigin.clone()),forward,up};
+ },get seat(){return contacts.seat;},set seat(value){contacts.seat=value;},apply(a,mouth='rest',blink=false,style='flat',smearFrom=null){
   for(const [n,b]of Object.entries(bones)){b.quaternion.copy(rest[n].q);b.position.copy(rest[n].p);b.scale.copy(rest[n].s);}
   root.position.set(a.x,a.y||0,a.z);root.rotation.set(rad(a.rootPitch||0),rad(a.yaw),rad(a.rootRoll||0));root.scale.set(a.scale*(1+.8*(a.flatten||0)),a.scale*(1-.94*(a.flatten||0)),a.scale*(1+.55*(a.flatten||0)));
   root.updateMatrixWorld(true);

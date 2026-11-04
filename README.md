@@ -63,6 +63,8 @@ All shots share the canvas orientation and 24 fps. A film supports 20 shots and 
 
 Agents receive the default script-to-reference workflow through `/AGENTS.md`, `/llms.txt`, nonvisual HTML metadata, API capabilities, and the `instructions`/`help` commands. It defaults to Reels (1080 × 1920), large centered characters with balanced margins, creative composition, checking rendered images, exporting MP4 plus matching JSON, and verifying delivery to the requested cloud/computer folder or a local fallback. Specific user instructions take precedence.
 
+Pose and gaze receive the same visual review as framing: agents inspect actual rest, speaking, action-extreme and cut-boundary images for motivated eyelines, body orientation, stable neck/head tilt and believable hand/prop contact. Reading, camera address and deliberate look-away beats are supported. The shared workflow explains one-shot gaze alignment and scoped head resets; agents re-render corrections and inspect the exported references before delivery.
+
 The collapsed **Commands** section exposes `instructions`, `help`, `status`, `validate`, `preview`, `patch`, `frame`, `exportJSON`, and `cancel`. Browser automation can call `window.animationAgent` or import `/agent-api.mjs`; `/llms.txt` and the [agent guide](docs/agents.md) document the interfaces. These are bounded application commands. **Open in editor** transfers the accepted recipe directly to the normal workflow.
 
 ## Work with a collaborator or a folder of scenes

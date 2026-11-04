@@ -11,6 +11,9 @@ import {setupShotStrip} from './film-ui.mjs';
 import exampleConfig from '../../examples/speech-scene.json';
 import { AnimationEditor, propLabel } from './animation-ui.mjs';
 import { ACTOR_CHANNELS, PROP_CHANNELS, animationSettings } from './motion.mjs';
+import {ACTOR_SECTIONS,PROP_SECTIONS} from './pose-sections.mjs';
+import {resetProjectSection,applyProjectPose} from './pose-editing.mjs';
+import {alignGaze} from './gaze-alignment.mjs';
 import { Stage } from './stage.mjs';
 import { generateSpeech, mixSpeech } from './speech/client.mjs';
 import { saveState, loadState, listSaved, loadSaved, localApp, quitLocal } from './storage.mjs';
@@ -135,6 +138,30 @@ function changed({speech=false}={}){
  referenceFiles=[];time=Math.min(time,currentDuration());refreshStats();renderAssigned();animationEditor?.refresh();save();renderPreview().catch(e=>status(e.message,true));
 }
 function activeState(){return previewContext().slot?.state||{scene:p().scene,mouths:['rest','rest'],blinks:[false,false]};}
+function resetBaseSection(target,section){
+ try{
+  const result=resetProjectSection(p(),{target,section});state.project=result.project;
+  animationEditor?.resetDraft();changed();populate();status(`Section reset.${result.warnings.length?' '+result.warnings.join(' '):''}`);
+ }catch(error){status(error.message,true);}
+}
+async function alignPose(actors,target,{draft=false}={}){
+ if(!stage)return;
+ return run('Aligning gaze…',async signal=>{
+  ++renderTicket;
+  const shown=draft?animationEditor.draftState(activeState()):{scene:structuredClone(p().scene),mouths:['rest','rest'],blinks:[false,false]};
+  await stage.prepare(shown.scene);signal.throwIfAborted();
+  const [w,h]=dimensions(p());stage.draw(shown,432,Math.round(432*h/w));
+  const result=alignGaze(stage,{actors,target});signal.throwIfAborted();
+  if(!result.changes.length){status(result.warnings.join(' ')||'No gaze change needed.');return;}
+  let warnings=result.warnings;
+  if(draft){animationEditor.setPoseDraft(result.changes[0].values);status(`Gaze aligned in the pose draft. Set keyframe to keep it.${warnings.length?' '+warnings.join(' '):''}`);}
+  else{
+   const edited=applyProjectPose(p(),{changes:result.changes});state.project=edited.project;warnings=[...warnings,...edited.warnings];
+   animationEditor.resetDraft();changed();populate();status(`Base gaze aligned.${warnings.length?' '+warnings.join(' '):''}`);
+  }
+  await renderPreview();
+ });
+}
 async function renderPreview(){
  const ticket=++renderTicket,view=previewContext(),project=view.project,slot=view.slot;
  const useArt=$('#show-art').checked&&view.clip&&tab!=='animate';
@@ -173,18 +200,25 @@ function renderProps(){
  const prop=props.find(v=>v.id===$('#prop-select').value)||props[0];if(!prop)return;
  $('#prop-attachment').innerHTML=option('world','World',prop.attachment)+p().scene.actors.flatMap((_,i)=>['left','right'].map(side=>option(`actor:${i}:${side}`,`${i?'B':'A'} · ${side} hand${i>=p().scene.count?' (hidden)':''}`,prop.attachment))).join('');
  $('#prop-color').value=prop.color;$('#prop-color').closest('label').hidden=prop.kind==='book';
- if($('#prop-fields').dataset.prop===prop.id){for(const input of $$('[data-prop-key]'))if(document.activeElement!==input)input.value=prop[input.dataset.propKey]??PROP_CHANNELS[input.dataset.propKey].default;}else{$('#prop-fields').dataset.prop=prop.id;$('#prop-fields').innerHTML=[['Position',['x','y','z']],['Rotation',['rx','ry','rz']],['Dimensions',['width','height','depth']],...(prop.kind==='book'?[['Book',['open','page']]]:[])].map(([label,keys])=>`<details ${label==='Rotation'?'':'open'}><summary>${label}</summary><div class="sliders">${keys.map(key=>{const c=PROP_CHANNELS[key];return `<label>${esc(c.label)}<input data-prop-key="${key}" type="number" min="${c.min}" max="${c.max}" step="${c.step}" value="${prop[key]??c.default}"></label>`;}).join('')}</div></details>`).join('');}
+ if($('#prop-fields').dataset.prop===prop.id){for(const input of $$('[data-prop-key]'))if(document.activeElement!==input)input.value=prop[input.dataset.propKey]??PROP_CHANNELS[input.dataset.propKey].default;}else{$('#prop-fields').dataset.prop=prop.id;$('#prop-fields').innerHTML=Object.entries(PROP_SECTIONS).filter(([id])=>id!=='book'||prop.kind==='book').map(([id,{label,keys}])=>`<details ${id==='rotation'?'':'open'}><summary>${label}</summary><div class="pose-section-actions"><button type="button" data-prop-reset-section="${id}" aria-label="Reset object ${label}">Reset</button></div><div class="sliders">${keys.map(key=>{const c=PROP_CHANNELS[key];return `<label>${esc(c.label)}<input data-prop-key="${key}" type="number" min="${c.min}" max="${c.max}" step="${c.step}" value="${prop[key]??c.default}"></label>`;}).join('')}</div></details>`).join('');}
 }
 function updateProp(key,value){
  const project=structuredClone(p()),prop=project.scene.props?.find(v=>v.id===$('#prop-select').value);if(!prop)return;
  prop[key]=value;try{validateProject(project);state.project=project;animationEditor?.resetDraft();changed();renderProps();}catch(e){status(e.message,true);renderProps();}
+}
+const scenePoseFields={position:['x','y','z','yaw','scale'],head:['headYaw','headPitch','headTilt','headSpin'],body:['bodyLean','bodyTurn','rootPitch','rootRoll'],'left-arm':['armL','armSideL','elbowL','handL','fingerCurlL','fingerPointL'],'right-arm':['armR','armSideR','elbowR','handR','fingerCurlR','fingerPointR'],legs:['thighL','kneeL','footL','thighR','kneeR','footR'],cartoon:['headScale','handScale','armStretchR','flatten','burst','noseDetach','nose']};
+function actorSections(actor,index){
+ return Object.entries(ACTOR_SECTIONS).map(([id,{label}])=>`<details data-section="${id}" ${id==='position'?'open':''}><summary>${label}</summary><div class="pose-section-actions"><button type="button" data-actor-reset-section="${id}" data-actor-index="${index}" aria-label="Reset ${label}" title="Reset base ${label.toLowerCase()} offsets. Held pose and expression stay selected.">Reset</button>${id==='head'?`${p().scene.count===2?`<button type="button" data-actor-align="partner" data-actor-index="${index}">Look at partner</button>`:''}<button type="button" data-actor-align="camera" data-actor-index="${index}">Look at camera</button>`:''}</div><div class="sliders">${scenePoseFields[id].map(key=>{const c=ACTOR_CHANNELS[key];return slider(c.label,key,actor[key]??c.default,c.min,c.max,c.step,`data-actor="${index}"`);}).join('')}</div></details>`).join('');
 }
 function populate(){
  $('#title').value=film?.title||p().title;$('#project-kind').textContent=film?'Film':'Clip';refreshShots();$('#format').value=p().scene.format;$('#style').value=p().scene.style;$('#background').value=p().scene.background;$('#cast-count').value=p().scene.count;$('#projection').value=p().scene.camera.projection;$('#rate').value=p().rate;$('#rate-label').textContent=p().rate.toFixed(2)+'×';
  $('#backdrop').innerHTML=Object.entries(BACKDROPS).map(([id,b])=>option(id,b.label,p().scene.backdrop||'none')).join('');
  for(const key of ['ground','backdrop'])$('#'+key+'-grid').checked=!!p().guides?.[key];
  $('#camera-fields').innerHTML=[['Orbit','azimuth',-180,180],['Elevation','elevation',-45,75],['Zoom','zoom',.4,3,.05],['Pan sideways','targetX',-3,3,.05],['Pan up/down','targetY',0,3,.05]].map(([l,k,min,max,step])=>slider(l,k,p().scene.camera[k],min,max,step||1,'data-camera')).join('');
- $('#actor-fields').innerHTML=p().scene.actors.slice(0,p().scene.count).map((a,i)=>`<div class="actor"><h3>Character ${i?'B':'A'}</h3><div class="field-pair"><label>Character<select data-actor="${i}" data-key="model">${MODELS.map(m=>option(m,MODEL_LABELS[m]||pretty(m),a.model)).join('')}</select></label><label>Held pose<select data-actor="${i}" data-key="pose">${POSES.map(m=>option(m,pretty(m),a.pose)).join('')}</select></label></div><div class="field-pair"><label>Chair when sitting<select data-actor="${i}" data-key="chair">${Object.entries(CHAIRS).map(([id,label])=>option(id,label,a.chair||'folding')).join('')}</select></label><label>Expression<select data-actor="${i}" data-key="emotion">${Object.entries(EMOTIONS).map(([id,e])=>option(id,e.label,a.emotion||'neutral')).join('')}</select></label></div><div class="sliders">${[['Position','x',-3,3,.05],['Depth','z',-2,2,.05],['Turn','yaw',-180,180,1],['Size','scale',.5,1.5,.05]].map(([l,k,min,max,step])=>slider(l,k,a[k],min,max,step,`data-actor="${i}"`)).join('')}</div><details><summary>Head, arms, and hands</summary><div class="sliders">${['headYaw','headPitch','headTilt','bodyLean','bodyTurn','armL','armSideL','elbowL','handL','armR','armSideR','elbowR','handR'].map(k=>slider(ACTOR_CHANNELS[k].label,k,a[k]??ACTOR_CHANNELS[k].default,ACTOR_CHANNELS[k].min,ACTOR_CHANNELS[k].max,1,`data-actor="${i}"`)).join('')}</div></details></div>`).join('');
+ $('#align-characters').textContent=p().scene.count===2?'Look at each other':'Look at camera';
+ const openSections=new Set($$('#actor-fields details[open]').map(node=>`${node.closest('.actor').dataset.index}:${node.dataset.section}`));
+ $('#actor-fields').innerHTML=p().scene.actors.slice(0,p().scene.count).map((a,i)=>`<div class="actor" data-index="${i}"><h3>Character ${i?'B':'A'}</h3><div class="field-pair"><label>Character<select data-actor="${i}" data-key="model">${MODELS.map(m=>option(m,MODEL_LABELS[m]||pretty(m),a.model)).join('')}</select></label><label>Held pose<select data-actor="${i}" data-key="pose">${POSES.map(m=>option(m,pretty(m),a.pose)).join('')}</select></label></div><div class="field-pair"><label>Chair when sitting<select data-actor="${i}" data-key="chair">${Object.entries(CHAIRS).map(([id,label])=>option(id,label,a.chair||'folding')).join('')}</select></label><label>Expression<select data-actor="${i}" data-key="emotion">${Object.entries(EMOTIONS).map(([id,e])=>option(id,e.label,a.emotion||'neutral')).join('')}</select></label></div>${actorSections(a,i)}</div>`).join('');
+ for(const node of $$('#actor-fields details'))if(openSections.has(`${node.closest('.actor').dataset.index}:${node.dataset.section}`))node.open=true;
  renderLines();$('#override-mouth').innerHTML=MOUTHS.map(m=>option(m,mouthNames[m],'rest')).join('');
  $('#audio-mode').value=p().audioMode;$('#audio-offset').value=p().audioOffset;$('#trim-start').value=p().audioTrimStart;$('#trim-end').value=p().audioTrimEnd;
  refreshStats();renderReferences();renderAssigned();renderProps();animationEditor?.refresh();
@@ -339,6 +373,7 @@ $('#add-prop').onclick=()=>{
 };
 $('#prop-select').onchange=renderProps;
 $('#prop-fields').onchange=e=>{if(e.target.dataset.propKey)updateProp(e.target.dataset.propKey,Number(e.target.value));};
+$('#prop-fields').onclick=e=>{const button=e.target.closest('[data-prop-reset-section]');if(button)resetBaseSection(`prop:${$('#prop-select').value}`,button.dataset.propResetSection);};
 $('#prop-color').onchange=e=>updateProp('color',e.target.value);
 $('#prop-attachment').onchange=e=>{
  const project=structuredClone(p()),prop=project.scene.props.find(v=>v.id===$('#prop-select').value);prop.attachment=e.target.value;
@@ -356,6 +391,8 @@ $('#projection').onchange=e=>{p().scene.camera.projection=e.target.value;if(e.ta
 $('#cast-count').onchange=e=>frame(e.target.value==='1'?'solo':'duet');
 $('#camera-fields').onchange=e=>{if(e.target.dataset.key){p().scene.camera[e.target.dataset.key]=Number(e.target.value);e.target.previousElementSibling.textContent=e.target.value;changed();}};
 $('#actor-fields').onchange=e=>{const el=e.target;if(el.dataset.actor!==undefined){p().scene.actors[Number(el.dataset.actor)][el.dataset.key]=el.tagName==='SELECT'?el.value:Number(el.value);if(el.previousElementSibling?.tagName==='OUTPUT')el.previousElementSibling.textContent=el.value;changed();}};
+$('#actor-fields').onclick=e=>{const reset=e.target.closest('[data-actor-reset-section]');if(reset)resetBaseSection(`actor:${reset.dataset.actorIndex}`,reset.dataset.actorResetSection);const gaze=e.target.closest('[data-actor-align]');if(gaze)alignPose([Number(gaze.dataset.actorIndex)],gaze.dataset.actorAlign);};
+$('#align-characters').onclick=()=>alignPose(undefined,p().scene.count===2?'partner':'camera');
 function frame(kind){animationEditor?.resetDraft();const next=withFraming(p(),kind),speech=next.lines.some((l,i)=>l.actor!==p().lines[i].actor);state.project=next;changed({speech});populate();}
 $$('[data-framing]').forEach(b=>b.onclick=()=>frame(b.dataset.framing));
 $('#reset-camera').onclick=()=>frame('reset');
@@ -474,7 +511,7 @@ $('#undo').onclick=()=>travelHistory(undo,redo);$('#redo').onclick=()=>travelHis
 document.addEventListener('visibilitychange',()=>{if(document.hidden){if(recordingActive)stopRecording().catch(e=>status(e.message,true));stopPlayback();flushSave().catch(()=>{});}});
 window.addEventListener('pagehide',()=>{stopPlayback();flushSave().catch(()=>{});});
 
-animationEditor=new AnimationEditor({project:p,clip:()=>clip,time:()=>time,seek:at=>{stopPlayback();time=Math.max(0,Math.min(currentDuration(),at));renderPreview().catch(e=>status(e.message,true));},change:project=>{validateProject(project);if(animationSettings(project).mode==='silent'||Object.keys(state.takes).length)compileClip(project,state.takes,project.slots);state.project=project;changed();renderProps();},preview:()=>renderPreview().catch(e=>status(e.message,true)),error:message=>status(message,true)});
+animationEditor=new AnimationEditor({align:(actor,target)=>alignPose([actor],target,{draft:true}),project:p,clip:()=>clip,time:()=>time,seek:at=>{stopPlayback();time=Math.max(0,Math.min(currentDuration(),at));renderPreview().catch(e=>status(e.message,true));},change:project=>{validateProject(project);if(animationSettings(project).mode==='silent'||Object.keys(state.takes).length)compileClip(project,state.takes,project.slots);state.project=project;changed();renderProps();},preview:()=>renderPreview().catch(e=>status(e.message,true)),error:message=>status(message,true)});
 async function stashShot(){if(animationEditor&&!animationEditor.finishEdits())return false;await captureShotThumbnail();if(film)updateFilmShot(film,state);await flushSave();return true;}
 function shotTask(label,action){return run(label,async()=>{if(!await stashShot())return;await action();filmViewCache=null;clearDrawingVideo();clearExport();refreshStats();renderAssigned();await renderPreview();await flushSave();status('');});}
 shotUI=setupShotStrip({getFilm:()=>film,getState:()=>state,

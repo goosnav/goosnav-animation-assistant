@@ -189,3 +189,91 @@ test('an exported film remains previewable after a shot removal and reports the 
   assert.equal(result.edit.ok,true);assert.equal(result.preview.ok,true);assert.equal(result.preview.images.length,1);assert.equal(result.preview.images[0].shotId,'second');assert.ok(result.preview.warnings.some(message=>/new.*references/i.test(message)));
  }finally{await browser.close();}
 });
+
+test('one-shot agent alignment improves actual posed gaze and preserves later keys, raw audio and base state',async()=>{
+ const {browser,page}=await openWorkspace();try{
+  const result=await page.evaluate(async()=>{
+   const api=await import('/agent-api.mjs'),config=JSON.parse(api.sampleDocument());
+   Object.assign(config.scene.actors[0],{headPitch:-35,headTilt:22,armR:58,pose:'point'});Object.assign(config.scene.actors[1],{headPitch:30,headTilt:-18});
+   config.audio={mode:'recording',offset:.25,trimStart:.5,trimEnd:1.5};config.keys=[{id:'later',target:'actor:0',time:1.5,transition:'hold',values:{headYaw:-12,armR:91}}];
+   const text=JSON.stringify(config),before=await api.previewDocument(text,{maxDimension:256}),aligned=await api.alignDocument(text),after=aligned.ok?await api.previewDocument(aligned.text,{maxDimension:256,samples:[{time:0},{time:1.7}]}):null;
+   const baseAtStart=await api.alignDocument(text,{scope:'scene',time:0}),baseDuringMotion=await api.alignDocument(text,{scope:'scene',time:1.7});
+   return {config,before,aligned,after,baseAtStart,baseDuringMotion};
+  });
+  assert.equal(result.aligned.ok,true,JSON.stringify(result.aligned.errors));assert.equal(result.after.ok,true,JSON.stringify(result.after.errors));
+  const data=JSON.parse(result.aligned.text);assert.deepEqual(data.scene,result.config.scene);assert.deepEqual(data.audio,result.config.audio);assert.deepEqual(data.dialogue,result.config.dialogue);
+  assert.deepEqual(data.keys.find(k=>k.id==='later'),result.config.keys[0]);assert.equal(data.keys.length,3);
+  assert.equal(result.aligned.alignment.scope,'key');assert.deepEqual(result.aligned.alignment.actors,[0,1]);
+  const before=result.before.images[0],after=result.after.images[0];assert.notEqual(before.dataURL,after.dataURL);
+  for(const [index,actor] of after.diagnostics.gaze.actors.entries()){
+   assert.ok(actor.partnerAngularResidual<before.diagnostics.gaze.actors[index].partnerAngularResidual-5,'saved offsets improve the rendered eyeline');
+   assert.ok(Number.isFinite(actor.forward[0]));const key=data.keys.find(k=>k.time===0&&k.target===`actor:${index}`);assert.ok(Math.abs(key.values.headPitch)<=25.001);assert.equal(key.values.headTilt,0);assert.equal(key.values.headSpin,0);
+  }
+  assert.equal(result.baseAtStart.ok,true,JSON.stringify(result.baseAtStart.errors));assert.equal(result.baseDuringMotion.ok,true,JSON.stringify(result.baseDuringMotion.errors));
+  assert.deepEqual(result.baseAtStart.alignment.changes,result.baseDuringMotion.alignment.changes,'scene scope solves the base/rest pose at either playhead time');
+  assert.deepEqual(JSON.parse(result.baseDuringMotion.text).keys,result.config.keys);
+ }finally{await browser.close();}
+});
+
+test('agent alignment edits one original sequence config and materializes its generated action props once',async()=>{
+ const {browser,page}=await openWorkspace();try{
+  const result=await page.evaluate(async()=>{
+   const api=await import('/agent-api.mjs'),config=JSON.parse(api.sampleDocument()),second=structuredClone(config);
+   second.audio={mode:'recording',offset:.2,trimStart:.1,trimEnd:1};second.actions=[{actor:0,action:'read',time:0,duration:1}];
+   const input={format:'goosnav-animation-sequence',version:1,id:'film',title:'Gaze isolation',shots:[{id:'first',title:'First',config},{id:'second',title:'Second',config:second}]};
+   const text=JSON.stringify(input),aligned=await api.alignDocument(text,{shotId:'second',actors:[0],target:'camera',time:.5});
+   const bad=await api.alignDocument(text,{target:'camera'}),point=await api.alignDocument(JSON.stringify(config),{actors:[0],target:{point:[0,1.5,3]},turnBody:false,scope:'scene'});
+   return {input,aligned,bad,point,preview:aligned.ok?await api.previewDocument(aligned.text,{samples:[{shotId:'second',time:.5}],maxDimension:256}):null};
+  });
+  assert.equal(result.aligned.ok,true,JSON.stringify(result.aligned.errors));assert.equal(result.preview.ok,true,JSON.stringify(result.preview.errors));assert.equal(result.bad.ok,false);assert.equal(result.point.ok,true,JSON.stringify(result.point.errors));
+  const data=JSON.parse(result.aligned.text),selected=data.shots[1].config;
+  assert.deepEqual(data.shots[0],result.input.shots[0]);assert.deepEqual(selected.audio,result.input.shots[1].config.audio);assert.equal(selected.actions,undefined);
+  assert.equal(selected.scene.props.length,1);assert.equal(selected.scene.props[0].kind,'book');assert.ok(selected.keys.some(k=>k.target===`prop:${selected.scene.props[0].id}`));
+  assert.equal(result.aligned.alignment.shotId,'second');assert.deepEqual(result.aligned.alignment.actors,[0]);assert.equal(result.aligned.alignment.target,'camera');
+  assert.ok(result.preview.images[0].diagnostics.gaze.actors.every(actor=>actor.origin.length===3));
+ }finally{await browser.close();}
+});
+
+test('cancel, external abort, synchronous reset and newer accepted drafts supersede an alignment job',async()=>{
+ const {browser,page}=await openWorkspace();try{
+  const result=await page.evaluate(async()=>{
+   const api=await import('/agent-api.mjs'),w=api.createAgentWorkspace({text:api.sampleDocument()});await w.preview({maxDimension:256});const before=w.status();
+   const pending=w.align();w.cancel();const cancelled=await pending;
+   const external=new AbortController(),pending2=w.align({signal:external.signal});external.abort();const aborted=await pending2;
+   const pending3=w.align(),reset=w.reset({target:'actor:0',section:'head'}),supersededByReset=await pending3;
+   const pending4=w.align(),newer=JSON.parse(w.exportJSON().text);newer.title='A newer accepted draft';w.load(JSON.stringify(newer));const supersededByDraft=await pending4;
+   const end=w.status(),text=w.exportJSON().text;w.dispose();return {before,cancelled,aborted,reset,supersededByReset,supersededByDraft,end,text};
+  });
+  for(const resultValue of [result.cancelled,result.aborted,result.supersededByReset,result.supersededByDraft]){assert.equal(resultValue.ok,false);assert.equal(resultValue.errors[0].code,'CANCELLED');}
+  assert.equal(result.reset.ok,true);assert.equal(result.end.busy,false);assert.deepEqual(result.end.artifacts,result.before.artifacts);
+  assert.equal(JSON.parse(result.text).title,'A newer accepted draft');assert.equal(JSON.parse(result.text).scene.actors[0].headPitch,0);
+ }finally{await browser.close();}
+});
+
+test('agent pose controls align and reset a current head key while preserving its arm and stale preview',async()=>{
+ const {browser,page}=await openWorkspace();try{
+  await page.evaluate(()=>{const config=JSON.parse(window.animationAgent.exportJSON().text);config.keys=[{id:'current',target:'actor:0',time:0,transition:'hold',values:{headPitch:-35,headTilt:20,armR:70}}];window.animationAgent.load(JSON.stringify(config));});
+  await page.getByRole('button',{name:'Preview images',exact:true}).click();await page.getByRole('img',{name:/Scene.*0.00 s/}).first().waitFor();
+  await page.getByText('Pose and gaze',{exact:true}).click();
+  await page.locator('#gaze-actors').selectOption('0');await page.locator('#gaze-target').selectOption('camera');await page.locator('#align-gaze').click();
+  await page.waitForFunction(()=>window.animationAgent.status().revision===3&&!window.animationAgent.status().busy);
+  assert.equal(await page.locator('#stale').isVisible(),true);
+  await page.locator('#reset-target').selectOption('actor:0');await page.locator('#reset-section').selectOption('head');await page.locator('#reset-scope').selectOption('key');await page.locator('#reset-section-button').click();
+  const data=JSON.parse(await page.getByRole('textbox',{name:'Scene or sequence JSON'}).inputValue()),key=data.keys.find(k=>k.id==='current');
+  assert.equal(key.values.headPitch,0);assert.equal(key.values.headYaw,0);assert.equal(key.values.headTilt,0);assert.equal(key.values.armR,70);
+  assert.equal(await page.locator('#stale').isVisible(),true);assert.equal(await page.getByRole('img',{name:/Scene.*0.00 s/}).first().isVisible(),true);
+ }finally{await browser.close();}
+});
+
+test('typing a newer JSON draft cancels alignment instead of replacing the typed text',async()=>{
+ const {browser,page}=await openWorkspace();let release;
+ try{
+  const gate=new Promise(resolve=>release=resolve);let requested;const requestSeen=new Promise(resolve=>requested=resolve);
+  await page.route('**/assets/actor-*.glb',async route=>{requested();await gate;await route.fulfill({contentType:'model/gltf-binary',body:await fs.readFile(`app${new URL(route.request().url()).pathname}`)});});
+  await page.evaluate(()=>{const original=window.animationAgent.align;window.animationAgent.align=options=>(window.pendingAlign=original(options));});
+  await page.getByText('Pose and gaze',{exact:true}).click();await page.locator('#align-gaze').click();await requestSeen;
+  const draft=JSON.parse(await page.getByRole('textbox',{name:'Scene or sequence JSON'}).inputValue());draft.title='A newer typed gaze draft';const text=JSON.stringify(draft,null,2);
+  await page.getByRole('textbox',{name:'Scene or sequence JSON'}).fill(text);release();const result=await page.evaluate(()=>window.pendingAlign);
+  assert.equal(await page.getByRole('textbox',{name:'Scene or sequence JSON'}).inputValue(),text);assert.equal(result.ok,false);assert.equal(result.errors[0].code,'CANCELLED');assert.equal(await page.evaluate(()=>window.animationAgent.status().busy),false);
+ }finally{release?.();await browser.close();}
+});

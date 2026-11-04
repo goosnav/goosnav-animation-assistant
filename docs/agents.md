@@ -40,6 +40,8 @@ The module exports:
 | `editDocument(text, operations)` | JSON text and 1–100 set operations | Validated new `text`, `changedPaths` and inspection |
 | `previewDocument(text, options)` | JSON text and rendering options | Promise of `{ok, images, contactSheet, warnings}` |
 | `frameDocument(text, options)` | JSON text and framing options | Promise of validated `text`, camera, framing metadata and warnings |
+| `alignDocument(text, options)` | JSON text and gaze options | Promise of validated `text`, one-shot alignment and warnings |
+| `resetDocument(text, options)` | JSON text, target, section and scope | Validated `text` with only the selected section reset |
 | `createAgentWorkspace({text?, onChange?, onResult?})` | Optional initial recipe and callbacks | Stateful controller with the operations below |
 
 Operations return `{ok:false, errors:[{code,message}]}` for malformed documents, unknown parameters, out-of-range values and rendering failures. A cancelled operation uses error code `CANCELLED`. Errors are bounded, and rejected edits do not return a partially changed document. The controller constructor requires valid initial text and throws if it is invalid.
@@ -105,6 +107,7 @@ Diagnostics report:
 - Actual visible actor and head pixel counts from a depth-tested flat-color pass of the posed meshes, including occlusion by actors and scenery. Antialiased edge pixels are excluded; head counts use the model's head meshes.
 - Normalized projected bounds of visible posed model geometry: left/top/right/bottom use image coordinates with `(0,0)` at the upper left. Values outside `[0,1]` indicate framing beyond the image edge. Hidden effect groups are excluded; bounds are `null` when that region has no visible geometry, such as a head replaced by an explosion.
 - A visible flag and a cropped-bounds flag for the actor and head. These measure different things: overlapping actors can have on-screen bounds but no visible head pixels.
+- `gaze.actors`: posed face `origin`, `forward` and `up` vectors in world coordinates, with `partnerAngularResidual` in degrees for two visible actors. This is a face-direction measurement, not eye tracking or a verdict about the intended look.
 
 Diagnostics do not grade image quality, expression, facing direction, attractiveness or readability. A bounding box may be conservative for a rotated pose. Inspect the PNG to judge composition. Preview renderers, transient images and canvases are released after each job; the controller retains only its last successful result.
 
@@ -126,6 +129,38 @@ const fitted = await api.frameDocument(text, {
 
 Framing measures the actual posed model geometry, sets a front camera, and fits the selected actors' heads or bodies. It preserves the projection type, actor indices, models, positions, count, dialogue and animation. Camera ranges still apply; the result warns when their limits constrain the fit. Render the result to review it. For other views, set exact camera azimuth/elevation/target values directly. Framing actor B never remaps B's dialogue to A.
 
+## Pose, gaze and section resets
+
+Give every look a reason: a partner, the camera, a page or another target. Let the body support that direction. Inspect actual PNGs at rest, during both speaking turns, at action extremes and on each side of cuts. Reject unexplained away-facing characters, sharply backward or sideways heads, unstable neck/roll and implausible hand/prop contact. Reading, looking away and direct camera address are valid when motivated. Follow `composition.poseReview` in the discoverable instructions; metadata and valid numeric ranges cannot replace looking at the images.
+
+```js
+const aligned = await api.alignDocument(text, {
+  shotId: 'wide', // required for multi-shot documents
+  actors: [0, 1], // default: all visible actors
+  target: 'partner', // 'camera' or {point: [x, y, z]} also supported
+  turnBody: true, // minimally turn the body when needed to avoid neck strain
+  scope: 'key', // default; 'scene' edits base offsets instead
+  time: 0
+});
+const reset = api.resetDocument(text, {
+  shotId: 'wide', target: 'actor:0', section: 'head', scope: 'timeline'
+});
+```
+
+Alignment fits actual posed face geometry with bounded neck yaw/pitch, neutral roll/spin and emotion compensation. It reports unreachable targets. It authors a **one-time pose**, with no continuing look constraint. Render again at the same time and inspect later motion. A world point is useful for a book or object; choose that point from the scene rather than assuming the character is looking at it.
+
+Reset sections are listed in `capabilities().poseSections`. Actors have `position`, `head`, `body`, `left-arm`, `right-arm`, `legs` and `cartoon`; props have `position`, `rotation`, `dimensions` and `book` (books only). Use `target:'prop:<id>'` for a prop. `target:'camera'` uses section `camera` and scene scope. Numeric resets preserve the model, held pose, expression, chair, prop appearance and unrelated animation.
+
+| Scope | Behavior |
+| --- | --- |
+| `scene` (reset default) | Reset base offsets only. Warn if keys or dialogue still override this section. |
+| `key` | Reset or align the pose at the selected frame; preserve other channels and later keys. |
+| `timeline` (reset only) | Reset the base and remove only this section's channels from the target's keys. Head reset also clears that actor's extra dialogue head turns. Preserve other sections, actors, dialogue and clip length. |
+
+Key/timeline edits materialize action presets into their equivalent animation keys so resets do not regenerate the removed channels. Existing drawing handoffs are retained for validation; changed poses require fresh references before importing artwork.
+
+The human editor offers base gaze and section Reset controls in Scene. Animation offers gaze and Reset controls in the current pose draft: **Set keyframe** keeps it, **Discard pose** abandons it. The agent workspace's collapsed **Pose and gaze** tools use the selected shot/time and expose the same scopes.
+
 ## Small command interface
 
 On the workspace page, the collapsed **Commands** panel and `window.animationAgent.command(...)` operate on the same accepted document and rendered results. This is an allowlisted app command language, not a shell or JavaScript evaluator.
@@ -139,6 +174,8 @@ On the workspace page, the collapsed **Commands** panel and `window.animationAge
 | `preview` | `await animationAgent.command('preview {"maxDimension":384}')` |
 | `patch` | `await animationAgent.command('patch [{"op":"set","path":"/scene/camera/zoom","value":1.5}]')` |
 | `frame` | `await animationAgent.command('frame {"actors":[1],"region":"head"}')` |
+| `align` | `await animationAgent.command('align {"actors":[0,1],"target":"partner","scope":"key","time":0}')` |
+| `reset` | `await animationAgent.command('reset {"target":"actor:0","section":"left-arm","scope":"timeline"}')` |
 | `exportJSON` | `await animationAgent.command('exportJSON')` |
 | `cancel` | `await animationAgent.command('cancel')` |
 
@@ -153,7 +190,7 @@ const state = animationAgent.status(); // safe to poll from another browser oper
 const result = await job;
 ```
 
-The controller also exposes `instructions()`, `load(text)`, `validate()`, `edit(operations)`, `frame(options)`, `preview(options)`, `exportJSON()`, `cancel()` and `dispose()`. `onChange(status)` and `onResult(result)` callbacks are available on a controller you create yourself. Starting a new render, accepting another document or cancelling invalidates an older pending job. Typing in the page's JSON editor also cancels a pending job, preserving the newer draft. Invalid edits and cancelled jobs keep the last accepted document and successful previews. A preview whose revision differs from the current document is marked stale. Manually editing the text area requires **Validate** or **Preview images** before commands operate on the new text.
+The controller also exposes `instructions()`, `load(text)`, `validate()`, `edit(operations)`, `frame(options)`, `align(options)`, `reset(options)`, `preview(options)`, `exportJSON()`, `cancel()` and `dispose()`. `onChange(status)` and `onResult(result)` callbacks are available on a controller you create yourself. Starting a new render, accepting another document or cancelling invalidates an older pending job. Typing in the page's JSON editor also cancels a pending job, preserving the newer draft. Invalid edits and cancelled jobs keep the last accepted document and successful previews. A preview whose revision differs from the current document is marked stale. Manually editing the text area requires **Validate** or **Preview images** before commands operate on the new text.
 
 ## Editor handoff and limits
 
