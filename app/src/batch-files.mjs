@@ -1,4 +1,5 @@
 import {parseConfig} from './config.mjs';
+import {isSequenceDocument,parseSequenceDocument} from './sequence-config.mjs';
 
 const DEFAULT_LIMITS={maxFiles:5000,maxBytes:2_000_000_000,maxDepth:16};
 const imagePattern=/\.(?:png|jpe?g|webp)$/i;
@@ -100,19 +101,22 @@ export async function discoverJobs(input,options={}){
     checkCancelled(options.signal);
     const inspected=[];
     for(const entry of candidates){
-      let error,sceneLike=basename(entry.path).toLowerCase()==='scene.json';
+      let error,kind='scene',sceneLike=/^(?:scene|sequence)\.json$/i.test(basename(entry.path));
       try{
         if(entry.error)throw Error(entry.error);
         if(entry.file.size>5_000_000)throw Error('Scene JSON exceeds 5 MB');
         const text=await entry.file.text();checkCancelled(options.signal);
-        try{sceneLike ||= JSON.parse(text)?.format==='goosnav-animation-config';}catch{}
-        parseConfig(text);
+        const isSequence=isSequenceDocument(text);kind=isSequence?'sequence':'scene';
+        try{sceneLike ||= isSequence||JSON.parse(text)?.format==='goosnav-animation-config';}catch{}
+        // Discovery does not know whether the user will request fresh references
+        // or return old artwork. Processing applies that compatibility policy.
+        if(isSequence)parseSequenceDocument(text,{allowStaleHandoff:true});else parseConfig(text);
       }catch(cause){checkCancelled(options.signal);error=cause.message;}
-      inspected.push({entry,error,sceneLike});
+      inspected.push({entry,error,sceneLike,kind});
     }
     const sceneCandidates=inspected.filter(c=>!c.error||c.sceneLike);
     const selected=sceneCandidates[0]??inspected[0];
-    const job=makeJob(path,selected.entry);
+    const job={...makeJob(path,selected.entry),kind:selected.kind};
     if(sceneCandidates.length>1)job.error='Ambiguous scene: multiple scene JSON configurations in one directory';
     else if(selected.error)job.error=selected.error;
     if(sceneCandidates.length)jobs.set(path,job);else unrecognized.push(job);

@@ -1,6 +1,6 @@
 # Goosnav Animation Assistant
 
-Make a small library of drawings for a talking-character clip. Set a fixed camera, write dialogue, rehearse with the robot voice, then trace only the distinct mouth/pose pictures. Bring your drawings back and the app repeats them at the original timings.
+Make a library of drawings for an animated scene or a film of ordered shots. Compose each shot, write dialogue, add actions, and trace the distinct mouth/pose pictures. Bring your drawings back and the app restores their timing, cuts, and audio in one MP4.
 
 Everything renders on your device. The hosted app needs static files only: no animation server, AI subscription, or external speech API. English speech and its phoneme timings come from the bundled Flite WASM engine. The six mouth poses are stylized references, not facial motion capture; the default robot audio and mouth timing are generated together. An optional voiceover follows that timing.
 
@@ -49,11 +49,25 @@ Use **Open JSON + drawings** to configure characters, chairs, camera, dialogue, 
 
 See the [configuration guide](docs/config.md) and [speech](examples/speech-scene.json) / [silent animation](examples/silent-scene.json) examples. JSON contains the editable setup, drawing identities, and timing; use a project ZIP backup to retain drawings and recorded audio.
 
+## Build a film from shots
+
+Use **+ Add shot** above the editor steps. The shot strip selects what you edit in **Scene**, **Speech**, and **Animation**. Rename a shot or open **Shot options** to duplicate, move, or remove it. Pending poses are saved when switching shots. Removal can be undone without discarding later edits.
+
+**Draw** and **Export** cover the whole film. **Create references** makes one compact MP4 and `sequence.json`, with numbered references labelled by shot. Upload the returned drawing video or numbered images with that JSON on any device; **Export animation** creates one MP4 with all shots, mouth timing, and audio in order. Reordering shots preserves the original drawing order. Adding/removing shots or changing visual states requires fresh references. Audio and voiceover controls apply to the selected shot; full-film playback combines them at exact cuts.
+
+All shots share the canvas orientation and 24 fps. A film supports 20 shots and 600 seconds. MP4 drawing carriers support 100 drawings; larger libraries use PNG ZIP. Project backups preserve the whole film, including drawings and recordings. See the [sequence guide](docs/sequence.md) and [three-shot example](examples/three-shot-sequence.json).
+
+## Visual tools for agents
+
+**Project → Agent workspace** opens a separate authoring page. It validates scene or sequence JSON, makes precise JSON-pointer edits, renders real PNG frames and contact sheets, and fits the camera to posed character geometry. Every preview includes drawing identities and measured visibility information. Agents should inspect those images before accepting composition changes.
+
+The collapsed **Commands** section exposes `help`, `status`, `validate`, `preview`, `patch`, `frame`, `exportJSON`, and `cancel`. Browser automation can call `window.animationAgent` or import `/agent-api.mjs`; `/llms.txt` and the [agent guide](docs/agents.md) document the interfaces. These are bounded application commands. **Open in editor** transfers the accepted recipe directly to the normal workflow.
+
 ## Work with a collaborator or a folder of scenes
 
-MP4 and PNG reference packages automatically include **scene.json**. Give the package to the artist, who returns one drawing per reference in the same order: a short MP4 or numbered images. On any device, choose **Open JSON + drawings**, select the JSON and returned artwork, then **Export animation**. No local reference-generation step is needed. You can load JSON first and add drawings later. Numbered images assign themselves; unnumbered images retain manual ordering.
+MP4 and PNG reference packages automatically include **scene.json** for a single scene or **sequence.json** for a film. Give the package to the artist, who returns one drawing per reference in the same order: a short MP4 or numbered images. On any device, choose **Open JSON + drawings**, select the JSON and returned artwork, then **Export animation**. No local reference-generation step is needed. You can load JSON first and add drawings later. Numbered images assign themselves; unnumbered images retain manual ordering.
 
-For multiple scenes, switch to **Batch**, choose the parent folder, and click **Generate all**. Each folder containing a scene JSON becomes a separate job. **Auto** generates references for JSON-only scenes and finishes animations when drawings are present. Choose **References** to regenerate reference packages or **Finished animations** to require artwork.
+For multiple scenes, switch to **Batch**, choose the parent folder, and click **Generate all**. Each folder containing one scene or sequence JSON becomes a separate job; a sequence produces one combined film. **Auto** generates references for JSON-only scenes and finishes animations when drawings are present. Choose **References** to regenerate reference packages or **Finished animations** to require artwork.
 
 Where folder writing is supported, results save automatically inside each scene’s new `generated` folder. **Output folder** chooses another destination, preserving scene subfolders. Repeated runs use `generated-2`, `generated-3`, and so on. Other browsers download one ZIP for the whole batch. One failed scene does not stop the others; cancellation keeps completed outputs. The editor also saves automatically when you create references or export an animation.
 
@@ -91,7 +105,7 @@ The transfer frame rate is independent of the final animation. The reference vid
 
 Animation timing and finished MP4 output use 24 fps. Older saved projects migrate to 24 fps while keeping their drawing identities. Changing speech speed clears manual mouth corrections because their original timestamps no longer match the speech. Reference and finished videos require exact frame encoding so handoffs retain their original timing. Encoding and extraction run locally using WebCodecs; if unavailable, update iPadOS/Safari or use the image alternatives.
 
-Retiming reuses existing artwork. If the required drawing set changes (camera, character, pose, or new mouth states), export a new reference video or restore the original scene before returning artwork. The latest exported reference set is saved in the project, survives browser reloads, and travels in project backups. Duplicate a clip to make the next shot; combine finished shots in your video editor. Multi-scene timelines are deferred.
+Retiming reuses existing artwork. If the required drawing set changes (camera, character, pose, or new mouth states), export a new reference video or restore the original scene before returning artwork. The latest exported reference set is saved in the project, survives browser reloads, and travels in project backups. Use the shot strip to compose multiple shots and export them together.
 
 The same **Upload drawings** control accepts images: consecutive numbered filenames assign automatically; for unnumbered images, tap them in reference order. PNG ZIP, layered PSD, and contact sheet exports remain under **Other formats**. Uploaded videos always supply drawing frames; there is no finished-video passthrough. Saved projects from the older passthrough importer attempt frame extraction on restore and keep their original source if recovery fails. Upgrading old 6 fps timing may reveal a short mouth shape that was previously skipped. Existing drawings are retained; any additional drawings are identified before export.
 

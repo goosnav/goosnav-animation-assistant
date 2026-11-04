@@ -1,0 +1,53 @@
+{
+  "format": "goosnav-animation-sequence",
+  "version": 1,
+  "id": "an-ordinary-three-shot-conversation",
+  "title": "A perfectly reasonable question",
+  "shots": [
+    {
+      "id": "a-close",
+      "title": "A — close-up",
+      "config": {
+        "format": "goosnav-animation-config",
+        "version": 1,
+        "scene": {
+          "format": "portrait",
+          "actors": [{"model": "blue", "x": 0, "yaw": 0}],
+          "camera": {"zoom": 1.75, "targetX": 0, "targetY": 1.45}
+        },
+        "dialogue": [{"actor": 0, "text": "I have a perfectly reasonable question.", "pause": 0.3}]
+      }
+    },
+    {
+      "id": "together-wide",
+      "title": "A and B — wide",
+      "config": {
+        "format": "goosnav-animation-config",
+        "version": 1,
+        "scene": {
+          "format": "portrait",
+          "actors": [{"model": "blue", "x": -0.45, "yaw": 60}, {"model": "rust-beady", "x": 0.45, "yaw": -60}],
+          "camera": {"zoom": 0.8, "targetX": 0, "targetY": 1}
+        },
+        "dialogue": [
+          {"actor": 0, "text": "Does this count as a plan?", "pause": 0.2},
+          {"actor": 1, "text": "It counts as a question.", "pause": 0.3}
+        ]
+      }
+    },
+    {
+      "id": "b-close",
+      "title": "B — close-up",
+      "config": {
+        "format": "goosnav-animation-config",
+        "version": 1,
+        "scene": {
+          "format": "portrait",
+          "actors": [{"model": "rust-beady", "x": 0, "yaw": 0}],
+          "camera": {"zoom": 1.75, "targetX": 0, "targetY": 1.45}
+        },
+        "dialogue": [{"actor": 0, "text": "Let's start there.", "pause": 0.3}]
+      }
+    }
+  ]
+}

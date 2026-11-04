@@ -56,7 +56,7 @@ export async function extractDrawingFrames(blob,{width,height,expectedCount,back
       try {
         signal?.throwIfAborted();
         if (frames.length >= expectedCount) requireFrameCount(frames.length+1,expectedCount);
-        context.fillStyle=background;context.fillRect(0,0,width,height);sample.draw(context,dx,dy,dw,dh);
+        context.fillStyle=typeof background==='function'?background(frames.length):background;context.fillRect(0,0,width,height);sample.draw(context,dx,dy,dw,dh);
         const png=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Could not extract this drawing.')),'image/png'));
         bytes+=png.size;if(bytes>150*1024*1024)throw new DrawingVideoError('Extracted drawings exceed 150 MB. Split this into shorter clips.');
         frames.push(png);onProgress(frames.length/expectedCount);

@@ -1,5 +1,5 @@
 import {readDirectory,entriesFromFiles,discoverJobs,createOutputWriter} from './batch-files.mjs';
-import {processSceneJob} from './pipeline.mjs';
+import {processDocumentJob} from './document-pipeline.mjs';
 import {download,imageZip} from './images.mjs';
 const MAX_ZIP_BYTES=128*1024*1024;
 const $=s=>document.querySelector(s);
@@ -38,7 +38,7 @@ export function setupBatch({run,status,onProgress}){
     if(job.error)throw Error(job.error);
     job.status='Starting…';render();$('#batch-generate').disabled=true;
     if(outputRoot||job.sourceDirectory)writer=await createOutputWriter({job,root:outputRoot||undefined,signal});
-    const result=await processSceneJob(job,{mode,referenceFormat,signal,onProgress:info=>{
+    const result=await processDocumentJob(job,{mode,referenceFormat,signal,onProgress:info=>{
      job.status=`${info.phase} ${Math.round(info.progress*100)}%`;render();$('#batch-generate').disabled=true;onProgress((i+info.progress)/jobs.length);status(`${i+1}/${jobs.length} · ${job.path||job.name}`);
     },emit:async(name,blob)=>{
      signal.throwIfAborted();if(writer)await writer.write(name,blob);else{pendingBytes+=blob.size;if(totalBytes+pendingBytes>MAX_ZIP_BYTES)throw Error('ZIP output exceeds 128 MB. Choose an output folder or run fewer scenes.');pending.push(new File([blob],`${job.path||safe(job.name)}/generated/${name}`,{type:blob.type}));}

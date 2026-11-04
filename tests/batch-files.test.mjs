@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {entriesFromFiles,readDirectory,discoverJobs,createOutputWriter,orderArtwork} from '../app/src/batch-files.mjs';
 
 const recipe=JSON.stringify({format:'goosnav-animation-config',version:1,title:'Scene',timing:{mode:'silent',duration:1}});
+const sequenceRecipe=JSON.stringify({format:'goosnav-animation-sequence',version:1,id:'film',title:'Two shots',shots:[{id:'a',title:'A',config:JSON.parse(recipe)},{id:'b',title:'B',config:JSON.parse(recipe)}]});
 function file(path,content=path){
   const value=new File([content],path.split('/').at(-1));
   Object.defineProperty(value,'webkitRelativePath',{value:path});
@@ -17,6 +18,23 @@ test('folder uploads strip exactly one shared selected root without losing neste
   const jobs=await discoverJobs(entries);
   assert.deepEqual(jobs.map(j=>[j.path,j.artwork.map(f=>f.name),j.error]),[['a',['1.png','2.png'],undefined],['b',[],undefined]]);
   assert.equal(jobs[0].config,files[0]);
+});
+
+test('sequence folders are one job, accept returned artwork, and coexist with legacy scene folders',async()=>{
+ const jobs=await discoverJobs([entry('film/sequence.json',sequenceRecipe),entry('film/drawings/2.png'),entry('film/drawings/1.png'),entry('scene/scene.json',recipe)]);
+ assert.equal(jobs.length,2);assert.equal(jobs[0].error,undefined);assert.equal(jobs[0].kind,'sequence');assert.deepEqual(jobs[0].artwork.map(f=>f.name),['1.png','2.png']);assert.equal(jobs[1].kind,'scene');
+ const mixed=await discoverJobs([entry('scene.json',recipe),entry('sequence.json',sequenceRecipe)]);assert.match(mixed[0].error,/ambiguous|multiple/i);
+ const invalid=JSON.parse(sequenceRecipe);invalid.shots[1].id='a';
+ const malformed=await discoverJobs([entry('parent/scene.json',recipe),entry('parent/bad/sequence.json',JSON.stringify(invalid))]);
+ assert.equal(malformed.length,2);assert.match(malformed[1].error,/duplicate/i);
+});
+
+test('batch discovery accepts stale well-shaped sequence handoffs so the selected generation mode decides compatibility',async()=>{
+ const {prepareSequence,sequenceJSON}=await import('../app/src/sequence.mjs');
+ const document=JSON.parse(sequenceJSON(await prepareSequence(sequenceRecipe)));document.shots.pop();
+ const [job]=await discoverJobs([entry('film/sequence.json',JSON.stringify(document)),entry('film/returned.mp4')]);
+ assert.equal(job.error,undefined);assert.equal(job.kind,'sequence');assert.equal(job.artwork.length,1);
+ document.handoff.slots[0].key='{}';const [malformed]=await discoverJobs([entry('film/sequence.json',JSON.stringify(document))]);assert.ok(malformed.error);
 });
 
 test('nested scene configs own their artwork and generated/reference assets never become drawings',async()=>{

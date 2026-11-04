@@ -1,6 +1,7 @@
 import { zip, unzipSync, strToU8, strFromU8 } from 'fflate';
 import { validateProject } from './core.mjs';
 import { validateTransfer } from './drawing-transfer.mjs';
+import { validateFilm } from './film-state.mjs';
 const LIMIT=256*1024*1024;
 export async function packProject(state){
  const files={};let next=0,total=0;
@@ -30,10 +31,14 @@ export async function unpackProject(blob){
   if(v&&typeof v==='object'){const out=Object.create(null);for(const[k,x]of Object.entries(v)){if(['__proto__','constructor','prototype'].includes(k))throw Error('Invalid project property');out[k]=decode(x,depth+1);}return out;}
   return v;
  }
- const result=decode(parsed);validateProject(result.project);
+ const result=decode(parsed);validateSaved(result);
+ return result;
+}
+function validateSaved(result){
+ validateProject(result.project);
  if(result.transfer!=null)validateTransfer(result.transfer);
  for(const key of ['recording','video'])if(result[key]!=null&&!(result[key] instanceof Blob))throw Error('Invalid saved media');
  for(const collection of [result.art,result.refs,result.thumbs,result.artThumbs])if(collection&&Object.values(collection).some(b=>!(b instanceof Blob)))throw Error('Invalid drawing media');
  if(result.takes)for(const t of Object.values(result.takes)){if(!(t.samples instanceof Float32Array)||!Array.isArray(t.phones)||t.phones.length>20000||!Number.isFinite(t.duration)||t.duration<=0||t.duration>120||![8000,16000,22050,24000,44100,48000].includes(t.sampleRate))throw Error('Invalid saved speech');for(const phone of t.phones)if(typeof phone.phone!=='string'||phone.phone.length>12||!Number.isFinite(phone.start)||!Number.isFinite(phone.end)||phone.start<0||phone.end<phone.start||phone.end>t.duration+.05)throw Error('Invalid saved phoneme timing');}
- return result;
+ if(result.film){validateFilm(result.film);for(const shot of result.film.shots)validateSaved(shot.state);}
 }
