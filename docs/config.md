@@ -1,6 +1,6 @@
 # Scene configuration JSON
 
-Load JSON accepts one UTF-8 file that sets up the scene, dialogue, expressions and timed actions. The app generates speech for speech scenes before replacing the current clip. Export JSON saves the current editable setup, including hand-edited motion keys. Use ZIP backups to keep recordings, generated speech, uploaded drawings and other media; JSON does not contain these assets.
+**Open JSON + drawings** accepts a UTF-8 file that sets up the scene, dialogue, expressions and timed actions. The app generates speech for speech scenes before replacing the current clip. Export JSON saves the current editable setup, including hand-edited motion keys. When a clip is compiled, it also saves a portable drawing handoff: reference order, drawing identities, speech timing and exposures. That JSON and the returned MP4 or numbered images can reconstruct the animation on another device without first making local reference pictures. Use ZIP backups to keep recordings, generated speech samples, uploaded drawings and other media; JSON does not contain these assets.
 
 Start with [speech-scene.json](../examples/speech-scene.json), which seats two characters and adds dialogue and gestures, or [silent-scene.json](../examples/silent-scene.json), which walks and waves without speech.
 
@@ -37,6 +37,7 @@ Only `format` and `version` are required. Unknown fields and explicit wrong type
 | `guides` | Optional boolean `ground` and `backdrop` reference guides. |
 | `overrides` | Mouth edits: `{ "actor": 0, "start": 1, "end": 1.2, "mouth": "round" }`. |
 | `audio` | Optional `mode`, `offset`, `trimStart`, `trimEnd`; defaults to robot audio and zero timing adjustments. |
+| `handoff` | Optional generated drawing manifest, version `1`; preserves reference identities, order and timing across devices. |
 
 `timing.mode` is `speech` or `silent`. Silent mode defaults to a 3-second duration; an explicit silent duration must be `0.5`–`120`. Speech duration may be `0`–`120` and is a minimum; speech and motion can extend it. `drawings` is `3`, `5` or `9`, controlling the number of intermediate poses. Actions extend silent duration as necessary. The entire compiled clip must fit within 120 seconds.
 
@@ -66,7 +67,7 @@ Up to 12 props are supported. Props accept `id`, `kind` (`book`, `cube`, `sphere
 
 Each line requires `actor` and `text` (up to 1,000 characters). Optional fields are `rate` (`0.5`–`2`, default `1`), `pause` (`0`–`10`, default `0.35`), `pose` (an actor pose or default `keep`), `headYaw` (`-75`–`75`, default `0`), `blink` and `smear` (booleans), and `emotion` (the six actor emotions). A line's emotion overrides the character's base emotion while that line is spoken.
 
-New project and dialogue IDs are generated on every load. JSON exports omit these IDs; they are not media references.
+New project and dialogue IDs are generated on every load. JSON exports omit these IDs; they are not media references. Drawing IDs in `handoff` are preserved and matched by visual state, independently of project IDs, dialogue IDs and JSON property order.
 
 ## Actions and walks
 
@@ -103,4 +104,42 @@ Export JSON always writes `keys` rather than `actions`. This preserves GUI edits
 
 Key IDs survive a round trip. Two keys cannot target the same subject at the same time. Mouth override shapes are `rest`, `small`, `open`, `wide`, `round` and `teeth`; up to 2,000 edits are allowed, each with `0 <= start <= end <= 120`.
 
-The parser rejects files larger than 5,000,000 UTF-8 bytes, excessive nesting, reserved prototype-related fields, unsupported versions, unknown fields, invalid values and unavailable targets. Parsing returns a validated candidate project and performs no speech generation, storage or current-project mutation. The app generates required speech and compiles that candidate before committing the replacement. `parseConfig(text)` and `exportConfig(project)` are exported from [config.mjs](../app/src/config.mjs).
+The parser rejects files larger than 5,000,000 UTF-8 bytes, excessive nesting, reserved prototype-related fields, unsupported versions, unknown fields, invalid values and unavailable targets. The same size limit covers the complete document, including its handoff. Parsing returns a validated candidate project and performs no speech generation, storage or current-project mutation. The app generates required speech and compiles that candidate before committing the replacement.
+
+## Portable drawing handoff
+
+Keep the exported JSON with the reference artwork. Return one frame per reference in the original order, either as a drawing MP4 or as numbered images. The MP4 carrier has a maximum of 100 drawings; image handoffs can contain up to 2,000 drawing states, subject to the complete JSON size limit. Exposure repetitions belong to the animation timeline, so they do not need duplicate returned drawings.
+
+Timing changes can reuse artwork while every required visual state is still present. The original reference order remains valid even when a drawing becomes unused. A changed camera, character or new mouth/pose state requires new references; importing old artwork against those changes fails explicitly. To author a new reference set from an edited recipe, use reference generation or remove the generated `handoff` field. Keep it when returning existing artwork.
+
+The handoff captures the speech phoneme timings separately from audio samples. When unchanged dialogue is regenerated, timing drift of at most one animation frame is pinned to the saved timing. A changed phoneme sequence or larger timing difference is rejected. Deliberately edited dialogue/rates use their newly generated timing and must still fit the existing drawing states. Unchanged source also verifies the saved exposure timeline against the current compiler, so incompatible animation-engine changes cannot silently alter the sequence.
+
+The generated manifest contains:
+
+| Field | Meaning |
+| --- | --- |
+| `version`, `id`, `fps`, `width`, `height` | Handoff version `1`, stable reference-set identity, 24 fps and canvas dimensions. |
+| `source` | Canonical JSON string describing the scene and timing inputs. Project, dialogue and key IDs are excluded. |
+| `slots` | Ordered `{ "id", "key" }` drawing entries. Each `key` is a canonical JSON string containing the visual state. |
+| `speech` | Entries by dialogue index, each with `line`, `duration` and `{ "phone", "start", "end" }` timings. No PCM audio. |
+| `totalFrames`, `exposures` | Frame count and contiguous `{ "slotId", "startFrame", "endFrame" }` exposures. End frames are exclusive. |
+
+Treat these fields as generated metadata. The editable recipe remains in the document's ordinary scene, dialogue, timing, keys and override fields.
+
+## JavaScript API
+
+[config.mjs](../app/src/config.mjs) exports `parseConfigDocument(text)`, returning `{project, handoff}` with `handoff: null` for plain recipes. The compatible `parseConfig(text)` returns only the project. `exportConfig(project)` still exports a plain recipe; pass a compiled clip to include the handoff:
+
+```js
+const json = exportConfig(project, {clip, takes, transfer});
+const document = parseConfigDocument(json);
+const generatedTakes = await generateSpeech(document.project);
+const restored = restoreHandoff(document.project, generatedTakes, document.handoff);
+// restored: {project, clip, takes, transfer, drawingSlots}
+```
+
+`restoreHandoff` is exported from [handoff.mjs](../app/src/handoff.mjs). For silent scenes, pass `{}` instead of generating speech. Use its returned `takes` for subsequent compiles and audio mixing, since those contain the preserved timing and the regenerated sample arrays. Inputs are not mutated. Supply speech `takes` when exporting a speech handoff; the export checks that its clip matches the current settings.
+
+`drawingSlots` is the expected artwork order, including original reference drawings that later became inactive. `transfer` is an MP4 manifest for up to 100 drawings, otherwise `null`. To re-export an imported image handoff after retiming, include its `drawingSlots` option, or pass the complete restored result: `exportConfig(restored.project, restored)`. Omit that option when making a fresh reference set. Plain recipes automatically receive a current drawing order during restoration and do not require a prior reference export.
+
+An incompatible visual state throws an error with `code: "HANDOFF_DRAWINGS_CHANGED"`. A JSON-only editor can offer new reference generation for that case. Artwork import must reject it. Schema errors, invalid exposures and incompatible speech are separate failures and must not be treated as permission to discard the handoff.

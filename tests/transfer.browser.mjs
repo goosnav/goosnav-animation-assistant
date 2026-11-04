@@ -136,7 +136,7 @@ test('drawing video UI restores manifest, imports artwork atomically and rebuild
   // Failure must leave the successfully imported drawings and preview intact; same file can retry.
   await page.locator('#import-artwork').setInputFiles({name:'bad.mp4',mimeType:'video/mp4',buffer:Buffer.from('broken')});
   await page.locator('#status.error').waitFor();assert.equal(await page.locator('#art-count').textContent(),String(count));assert.equal(await page.locator('#import-artwork').inputValue(),'');
-  await page.locator('[data-tab=finish]').click();assert.equal(await page.locator('#audio-mode').inputValue(),'robot');assert.equal(await page.locator('#voiceover-options').getAttribute('open'),null);await page.locator('#export').click();await page.getByText('Animation ready to save.',{exact:false}).waitFor({timeout:90000});
+  await page.locator('[data-tab=finish]').click();assert.equal(await page.locator('#audio-mode').inputValue(),'robot');assert.equal(await page.locator('#voiceover-options').getAttribute('open'),null);await page.locator('#export').click();await page.getByText('Animation saved.',{exact:false}).waitFor({timeout:90000});
   assert.ok(await page.locator('#final-video').evaluate(v=>v.duration)>count/24+1);
   const movieInfo=await page.evaluate(async()=>{const {inspectMovie}=await import('/test-video.mjs');return inspectMovie(await (await fetch(document.querySelector('#final-video').src)).blob());});
   assert.ok(Math.abs(movieInfo.fps-24)<.01);assert.equal(movieInfo.audio,'aac');assert.ok(movieInfo.peak>.05,'default export must contain audible robot speech');
@@ -154,7 +154,7 @@ test('drawing video UI restores manifest, imports artwork atomically and rebuild
   // Speech speed must regenerate audio and phonemes without asking for a second Generate click.
   await page.locator('#rate').fill('1.5');await page.locator('#rate').dispatchEvent('change');await page.getByText('Speech ready.',{exact:true}).waitFor({timeout:60000});
   assert.ok(Number(await page.locator('#duration').textContent())<duration*.85);assert.equal(await page.locator('#art-count').textContent(),String(count));
-  assert.equal(await page.locator('#audio-mode').inputValue(),'robot');await page.locator('#export').click();await page.getByText('Animation ready to save.',{exact:true}).waitFor({timeout:90000});
+  assert.equal(await page.locator('#audio-mode').inputValue(),'robot');await page.locator('#export').click();await page.getByText('Animation saved.',{exact:true}).waitFor({timeout:90000});
   const faster=await page.evaluate(async()=>{const {inspectMovie}=await import('/test-video.mjs');return inspectMovie(await (await fetch(document.querySelector('#final-video').src)).blob());});
   assert.equal(faster.audio,'aac');assert.ok(faster.peak>.05);assert.ok(faster.frames<movieInfo.frames*.85);assert.ok(Math.abs(faster.fps-24)<.01);
   await page.screenshot({path:'.work/video-transfer-ipad.png',fullPage:true});

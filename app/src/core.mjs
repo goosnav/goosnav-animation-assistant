@@ -121,10 +121,18 @@ export function phoneMouth(phone) {
   if (['aa','ae','ah','aw','ay'].includes(p)) return 'open';
   return 'small';
 }
+function drawingStateKey(value){
+  if(Array.isArray(value))return `[${value.map(drawingStateKey).join(',')}]`;
+  if(value&&typeof value==='object')return `{${Object.keys(value).filter(k=>value[k]!==undefined).sort().map(k=>`${JSON.stringify(k)}:${drawingStateKey(value[k])}`).join(',')}}`;
+  return JSON.stringify(value);
+}
 export function compileClip(project, takes = {}, previous = []) {
   validateProject(project);
   const animation=animationSettings(project),silent=animation.mode==='silent';
   const slots=previous.map(s=>({...s,active:false})), byKey=new Map(slots.map(s=>[s.key,s]));
+  // Imported inactive states may have canonical JSON property order. Reuse their
+  // identity without rewriting saved keys that existing transfer manifests use.
+  const byState=new Map(slots.map(s=>[drawingStateKey(s.state),s]));
   const lines=[]; let cursor=.3;
   for (const l of silent?[]:project.lines.filter(l=>l.text.trim())) {
     const take=takes[l.id]; if (!take?.phones?.length) throw Error('Generate speech before compiling the clip');
@@ -189,6 +197,7 @@ export function compileClip(project, takes = {}, previous = []) {
     const sampleTime=(f+.5)/project.fps;
     applyMotion(state,project,duration===120&&f===totalFrames-1?Math.max(sampleTime,lastKey):sampleTime,project.fps);
     const key=JSON.stringify(state);let slot=byKey.get(key);
+    if(!slot&&byState.size){slot=byState.get(drawingStateKey(state));if(slot)byKey.set(key,slot);}
     if(!slot){
       if(slots.length>=2000)throw Error('Drawing library exceeds 2000 drawings. Use fewer keys or fewer drawings per move, or start a new clip.');
       slot={id:`d${uid()}`,key,state};byKey.set(key,slot);slots.push(slot);

@@ -1,6 +1,8 @@
+let speechWorkerURL;
+export function setSpeechWorkerURL(url){speechWorkerURL=new URL(url,location.href);}
 export function generateSpeech(project,{signal,onProgress=()=>{}}={}){
  return new Promise((resolve,reject)=>{
-  const worker=new Worker(new URL('./voice-worker.mjs',location.href),{type:'module'}),takes={};
+  const worker=new Worker(speechWorkerURL||new URL('./voice-worker.mjs',location.href),{type:'module'}),takes={};
   const timer=setTimeout(()=>finish(Error('Speech generation timed out; try a shorter line')),90000);
   const abort=()=>finish(new DOMException('Cancelled','AbortError'));
   function finish(error){clearTimeout(timer);worker.terminate();signal?.removeEventListener('abort',abort);error?reject(error):resolve(takes);}

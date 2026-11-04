@@ -24,7 +24,7 @@ test('iPad-sized workflow generates unique references and restores a saved clip'
   const pngs=Object.entries(archive).filter(([name])=>name.endsWith('.png')).reverse();
   const guideInk=await page.evaluate(async bytes=>{const image=await createImageBitmap(new Blob([new Uint8Array(bytes)]));const canvas=document.createElement('canvas');canvas.width=image.width;canvas.height=image.height;const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);image.close();const data=ctx.getImageData(canvas.width-500,0,500,220).data;let dark=0;for(let i=0;i<data.length;i+=4)if(data[i]<45&&data[i+1]<45&&data[i+2]<45)dark++;return dark;},[...pngs[0][1]]);
   assert.ok(guideInk>300,'PNG reference export must contain its mouth label');
-  await page.locator('#import-artwork').setInputFiles(pngs.map(([name,buffer])=>({name,mimeType:'image/png',buffer:Buffer.from(buffer)})));
+  await page.locator('#import-artwork').setInputFiles(pngs.map(([name,buffer],i)=>({name:`drawing-${String.fromCharCode(97+i)}.png`,mimeType:'image/png',buffer:Buffer.from(buffer)})));
   await page.locator('#import-gallery button').last().waitFor();
   for(let i=count-1;i>=0;i--)await page.locator('#import-gallery button').nth(i).click();
   assert.equal(await page.locator('#import-gallery .number').first().textContent(),String(count));
@@ -34,7 +34,7 @@ test('iPad-sized workflow generates unique references and restores a saved clip'
   await page.getByRole('button',{name:'Export',exact:true}).click();
   await page.locator('#audio-mode').selectOption('silent');
   await page.getByRole('button',{name:'Export animation',exact:true}).click();
-  await page.getByText('Animation ready to save.',{exact:false}).waitFor({timeout:90000}).catch(async e=>{throw Error(`${e.message}; status: ${await page.locator('#status').textContent()}`);});
+  await page.getByText('Animation saved.',{exact:false}).waitFor({timeout:90000}).catch(async e=>{throw Error(`${e.message}; status: ${await page.locator('#status').textContent()}`);});
   const movie=page.waitForEvent('download');await page.getByRole('button',{name:'Download MP4',exact:true}).click();await (await movie).saveAs('.work/roundtrip.mp4');
   await page.locator('#voiceover-options summary').click();
   await page.locator('#record').click();await page.locator('#countdown').waitFor();await page.locator('#stop-recording').click();
@@ -43,7 +43,7 @@ test('iPad-sized workflow generates unique references and restores a saved clip'
   await page.locator('#record').click();await page.locator('#countdown').waitFor();
   await page.locator('#countdown').waitFor({state:'hidden'});await page.waitForTimeout(500);await page.locator('#stop-recording').click();
   await page.getByText('Voiceover recorded.',{exact:false}).waitFor();assert.equal(await page.locator('#export-result').isVisible(),false);
-  await page.locator('#export').click();await page.getByText('Animation ready to save.',{exact:false}).waitFor({timeout:90000}).catch(async e=>{throw Error(`${e.message}; status: ${await page.locator('#status').textContent()}`);});
+  await page.locator('#export').click();await page.getByText('Animation saved.',{exact:false}).waitFor({timeout:90000}).catch(async e=>{throw Error(`${e.message}; status: ${await page.locator('#status').textContent()}`);});
   const voiced=page.waitForEvent('download');await page.locator('#download-video').click();await (await voiced).saveAs('.work/voiced.mp4');
   await page.reload();await page.getByText('Project restored',{exact:false}).waitFor();
   assert.deepEqual(errors,[]);

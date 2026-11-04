@@ -4,12 +4,22 @@
 <body>
 <header><h1>GOOSNAV<sup>®</sup> ANIMATION ASSISTANT<span class="color-blocks" aria-hidden="true"><i></i><i></i><i></i><i></i></span></h1><div class="project-tools"><button id="new" title="Clear project to defaults">Clear</button><button id="duplicate">Duplicate</button><button id="undo">Undo</button><button id="redo">Redo</button><details><summary>Project</summary><div class="menu"><button id="save-project">Save backup</button><label class="file-button">Open backup<input id="open-project" type="file" accept=".zip"></label><button id="quit-local" hidden>Quit</button></div></details></div></header>
 <main>
+ <nav class="mode-switch" aria-label="Workspace"><button id="editor-mode" aria-pressed="true">Editor</button><button id="batch-mode-button" aria-pressed="false">Batch</button></nav>
  <div class="project-title"><label>Clip<input id="title" maxlength="200" value="An ordinary conversation"></label><p id="saved" role="status">Loading…</p></div>
- <div class="button-list config-tools"><label class="file-button">Load JSON<input id="load-config" type="file" accept=".json,application/json"></label><button id="export-config">Export JSON</button><button id="example-config">Example JSON</button></div>
+ <div class="button-list config-tools"><label class="file-button">Open JSON + drawings<input id="load-config" type="file" multiple accept=".json,.mp4,.mov,.m4v,.png,.jpg,.jpeg,.webp"></label><button id="export-config">Export JSON</button><button id="example-config">Example JSON</button></div>
  <details id="saved-clips"><summary>Saved clips</summary><div id="saved-list" class="button-list"></div></details>
  <nav class="steps" aria-label="Animation steps"><button data-tab="stage" aria-current="step">Scene</button><button data-tab="rehearse">Speech</button><button data-tab="animate">Animation</button><button data-tab="draw">Draw</button><button data-tab="finish">Export</button></nav>
  <div id="status" class="status" role="status" aria-live="polite">Loading…</div>
  <div id="busy-panel" hidden><progress id="progress"></progress><button id="cancel">Cancel</button></div>
+ <section id="batch-panel" hidden>
+  <h2>Batch</h2>
+  <div class="button-list"><button id="batch-folder" class="primary">Choose folder</button><label class="file-button">Choose files<input id="batch-files" type="file" multiple accept=".json,.mp4,.mov,.m4v,.png,.jpg,.jpeg,.webp"></label><input id="batch-folder-input" type="file" webkitdirectory multiple hidden></div>
+  <p class="hint">One scene JSON per folder. Add a drawing video or numbered images to finish it.</p>
+  <div class="field-pair"><label>Generate<select id="batch-mode"><option value="auto">Auto</option><option value="references">References</option><option value="animation">Finished animations</option></select></label><label id="batch-format-label">Reference format<select id="batch-format"><option value="mp4">MP4 + JSON</option><option value="png">PNG + JSON</option><option value="both">MP4 + PNG + JSON</option></select></label></div>
+  <div class="destination"><span id="batch-output-label"></span><button id="batch-output">Change output folder</button><button id="batch-reset-output" hidden>Reset</button></div>
+  <ul id="batch-jobs" aria-live="polite"></ul>
+  <div class="button-list"><button id="batch-generate" class="primary" disabled>Generate all</button><button id="batch-download" hidden>Download results</button></div>
+ </section>
  <div class="workspace">
   <aside class="preview-panel">
    <div class="panel-heading"><h2>Preview</h2><span id="preview-badge" class="tag">3D GUIDE</span></div>
@@ -78,12 +88,13 @@
     <div id="drawing-video-result" hidden><div class="button-list"><button id="share-drawing-video" class="primary">Save to Photos</button><button id="download-drawing-video">Download MP4</button></div><p id="drawing-video-info" class="hint"></p></div>
     <div id="selection-tools" hidden><p id="selection-count"></p><div class="preset-row"><button id="selection-undo">Undo selection</button><button id="selection-clear">Clear selection</button></div><div id="import-gallery" class="gallery"></div><label>Image sizing<select id="image-fit"><option value="exact">Original size</option><option value="fit">Fit</option><option value="crop">Crop</option></select></label><button id="use-drawings" class="primary wide">Use drawings</button></div>
     <div id="assigned-gallery" class="gallery"></div><div id="reference-gallery" class="gallery"></div>
-    <details id="draw-help"><summary>Procreate help</summary><ol><li>Import the reference MP4 from Photos or Files.</li><li>Trace each frame in a group with its reference. Keep the frame order and hide the reference layers, including the sound labels and grids.</li><li>Export Animated MP4 at Max Resolution, without frame holds. Upload it here.</li></ol><p>Check that every frame imported before drawing; Procreate has a layer limit. Save a project backup to move devices.</p></details>
+    <details id="draw-help"><summary>Procreate help</summary><ol><li>Import the reference MP4 from Photos or Files.</li><li>Trace each frame in a group with its reference. Keep the frame order and hide the reference layers, including the sound labels and grids.</li><li>Export Animated MP4 at Max Resolution, without frame holds. Upload it here.</li></ol><p>Check that every frame imported before drawing; Procreate has a layer limit. Keep scene.json with the returned drawings to continue on another device.</p></details>
     <details><summary>Other formats</summary><div class="button-list"><button id="zip">PNG ZIP</button><button id="psd">Layered PSD</button><button id="contact-sheet">Contact sheet</button></div></details>
    </section>
    <section data-view="finish" hidden>
     <h2>Export</h2>
     <label>Audio<select id="audio-mode"><option value="robot">Robot voice</option><option value="recording">My voiceover</option><option value="silent">Silent</option></select></label>
+    <div class="destination"><span id="editor-output-label">Downloads</span><button id="editor-output">Choose output folder</button><button id="editor-reset-output" hidden>Reset</button></div>
     <button id="export" class="primary wide">Export animation</button>
     <div id="export-result" hidden><video id="final-video" controls playsinline></video><div class="button-list"><button id="share-video" class="primary">Save to Photos</button><button id="download-video">Download MP4</button></div></div>
     <details id="voiceover-options"><summary>Record voiceover</summary>

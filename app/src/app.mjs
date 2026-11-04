@@ -1,6 +1,9 @@
 import { newProject, withFraming, BACKDROPS, validateProject, withSpeechRate, upgradeTiming, compileClip, slotAt, dimensions, toggleSelection, MODELS, MODEL_LABELS, MOUTHS, POSES, CHAIRS, uid } from './core.mjs';
 import {EMOTIONS} from './emotions.mjs';
-import {parseConfig,exportConfig} from './config.mjs';
+import {exportConfig} from './config.mjs';
+import {prepareScene,attachArtwork,renderAnimation} from './pipeline.mjs';
+import {createOutputWriter} from './batch-files.mjs';
+import {setupBatch} from './batch-ui.mjs';
 import exampleConfig from '../../examples/speech-scene.json';
 import { AnimationEditor, propLabel } from './animation-ui.mjs';
 import { ACTOR_CHANNELS, PROP_CHANNELS, animationSettings } from './motion.mjs';
@@ -9,7 +12,7 @@ import { generateSpeech, mixSpeech } from './speech/client.mjs';
 import { saveState, loadState, listSaved, loadSaved, localApp, quitLocal } from './storage.mjs';
 import { packProject, unpackProject } from './archive.mjs';
 import { download, shareFiles, imageZip, normalizeImage, ImageCache, layeredPSD, decodeImage, thumbnail } from './images.mjs';
-import { exportMP4, probeMP4, microphone, fitVoice } from './video.mjs';
+import { microphone, fitVoice } from './video.mjs';
 import { makeTransfer, validateTransfer, transferSlots, assignTransferFrames } from './drawing-transfer.mjs';
 import { exportFrameVideo, extractDrawingFrames } from './frame-video.mjs';
 import { REFERENCE_VERSION, referenceGuideKey, drawPerspectiveGuides, annotatedReference } from './reference.mjs';
@@ -22,13 +25,35 @@ const pretty=s=>s.replaceAll('-',' ').replace(/^./,c=>c.toUpperCase());
 let state={project:newProject(),takes:{},art:{},refs:{},recording:null,video:null,thumbs:{},artThumbs:{}},clip=null,stage,tab='stage',time=0;
 let closing=false,busy=null,playing=false,playToken=0,source=null,context,cache,renderTicket=0,saveTimer,saveChain=Promise.resolve(),mic=null,recordingActive=false,recordingToken=0;
 let imports=[],order=[],undo=[],redo=[],lastHistory,urls=[],voiceUrl,finalUrl,finalBlob,referenceFiles=[];
-let drawingVideoBlob,animationEditor;
+let drawingVideoBlob,animationEditor,batchUI,editorOutput=null,pendingArtwork=[];
 const p=()=>state.project;
 function status(message,error=false){$('#status').textContent=message;$('#status').classList.toggle('error',error);}
 function audioContext(){return context??=new AudioContext();}
 function currentDuration(){return clip?.duration||0;}
 function slots(){return clip?.slots.filter(s=>s.active)||[];}
 function filename(suffix){return (p().title.replace(/[^a-z0-9_-]+/gi,'-').slice(0,60)||'animation')+suffix;}
+function currentTransfer(){
+ if(!clip)return null;
+ const ordered=currentDrawingSlots();if(ordered.length>100)return null;
+ if(state.transfer){try{const saved=transferSlots(state.transfer,p(),clip);if(saved.length===ordered.length&&saved.every((s,i)=>s.id===ordered[i].id))return state.transfer;}catch{}}
+ const transfer=makeTransfer(p(),{...clip,slots:ordered.map(s=>({...s,active:true}))});transfer.id=ordered[0].id.slice(1);return transfer;
+}
+function currentDrawingSlots(){
+ const ordered=Array.isArray(state.drawingOrder)&&new Set(state.drawingOrder).size===state.drawingOrder.length?state.drawingOrder.map(id=>clip?.slots.find(s=>s.id===id)):null;
+ return ordered?.every(Boolean)&&slots().every(s=>ordered.some(d=>d.id===s.id))?ordered:slots();
+}
+function portableJSON(){return exportConfig(p(),clip?{clip,takes:state.takes,transfer:currentTransfer(),drawingSlots:currentDrawingSlots()}:{});}
+async function saveEditorFiles(files,name,signal){
+ if(editorOutput){const writer=await createOutputWriter({source:editorOutput,job:{path:''},signal});try{for(const file of files)await writer.write(file.name,file);await writer.close();}catch(e){await writer.abort();throw e;}}
+ else download(files.length===1?files[0]:await imageZip(files),name);
+}
+function pipelineProgress(info){status(info.phase+'…');$('#progress').value=info.progress;}
+function setWorkspace(mode){
+ if(mode==='batch'&&animationEditor&&!animationEditor.finishEdits())return;
+ stopPlayback();
+ for(const selector of ['.project-title','.config-tools','#saved-clips','.steps','.workspace','.step-footer','.project-tools'])$(selector).hidden=mode==='batch';
+ $('#batch-panel').hidden=mode!=='batch';$('#editor-mode').setAttribute('aria-pressed',String(mode==='editor'));$('#batch-mode-button').setAttribute('aria-pressed',String(mode==='batch'));batchUI?.refresh();
+}
 function snapshot(){return JSON.stringify(p());}
 function remember(){if(lastHistory){undo.push(lastHistory);if(undo.length>30)undo.shift();}redo=[];lastHistory=snapshot();}
 function save(){if(closing)return;clearTimeout(saveTimer);$('#saved').textContent='Saving…';saveTimer=setTimeout(()=>flushSave().catch(()=>{}),250);}
@@ -142,7 +167,7 @@ async function run(label,fn){
  if(stage)stage.controls.enabled=false;
  try{await fn(controller.signal);}
  catch(e){status(e.name==='AbortError'?'Cancelled.':e.message,e.name!=='AbortError');}
- finally{busy=null;$$('button,input,select,textarea').forEach(e=>e.disabled=false);$('#busy-panel').hidden=true;showTab(tab);if(!closing)save();}
+ finally{busy=null;$$('button,input,select,textarea').forEach(e=>e.disabled=false);$('#busy-panel').hidden=true;showTab(tab);batchUI?.refresh();if(!closing)save();}
 }
 function requireClip(){if(!clip)throw Error('Generate speech or choose a silent duration in Animation.');}
 function requireArt(){requireClip();if(slots().some(s=>!state.art[s.id]))throw Error('Import your drawn video or assign all drawings before exporting the finished clip.');}
@@ -166,12 +191,12 @@ async function prepareDrawings(signal){
  const guideKey=referenceGuideKey(p()),reuse=state.refsVersion===REFERENCE_VERSION&&state.refsGuides===guideKey;
  const fresh=reuse?{...state.refs}:{},thumbs=reuse?{...state.thumbs}:{};
  try{await renderer.prepare(p().scene);for(const [i,s]of slots().entries()){signal.throwIfAborted();if(!fresh[s.id]){renderer.draw(s.state,w,h,{guides:p().guides});fresh[s.id]=await annotatedReference(await renderer.png(),s.state,w,h,p().guides);thumbs[s.id]=await thumbnail(fresh[s.id]);}$('#progress').value=(i+1)/slots().length;await new Promise(r=>setTimeout(r,0));}}finally{renderer.dispose();canvas.width=1;canvas.height=1;}
- signal.throwIfAborted();state.refs=fresh;state.thumbs=thumbs;state.refsVersion=REFERENCE_VERSION;state.refsGuides=guideKey;referenceFiles=slots().map((s,i)=>new File([fresh[s.id]],`${String(i+1).padStart(2,'0')}-${s.id}.png`,{type:'image/png'}));
+ signal.throwIfAborted();state.refs=fresh;state.thumbs=thumbs;state.refsVersion=REFERENCE_VERSION;state.refsGuides=guideKey;referenceFiles=slots().map((s,i)=>new File([fresh[s.id]],`${String(i+1).padStart(4,'0')}.png`,{type:'image/png'}));
  renderReferences();
 
 }
 async function prepareDrawingVideo(signal){
- requireClip();const transfer=makeTransfer(p(),clip);
+ requireClip();let transfer=currentTransfer();if(!transfer||transfer.slots.length!==slots().length){transfer=makeTransfer(p(),clip);transfer.id=slots()[0].id.slice(1);}
  await prepareDrawings(signal);signal.throwIfAborted();
  const canvas=document.createElement('canvas');canvas.width=transfer.width;canvas.height=transfer.height;
  const ctx=canvas.getContext('2d'),images=new ImageCache(state.refs);
@@ -180,10 +205,11 @@ async function prepareDrawingVideo(signal){
   const blob=await exportFrameVideo({canvas,frameCount:transfer.slots.length,signal,onProgress:f=>{$('#progress').value=f;},drawFrame:async i=>{ctx.drawImage(await images.get(transfer.slots[i].id),0,0,canvas.width,canvas.height);}});
   signal.throwIfAborted();
   // Save the mapping before exposing the download. Otherwise leaving for Procreate could lose it.
-  const previous=state.transfer;state.transfer=transfer;
-  try{await flushSave();}catch(e){state.transfer=previous;throw e;}
+  const previous=state.transfer,previousOrder=state.drawingOrder;state.transfer=transfer;state.drawingOrder=transfer.slots.map(s=>s.id);
+  try{await flushSave();}catch(e){state.transfer=previous;state.drawingOrder=previousOrder;throw e;}
   clearDrawingVideo();drawingVideoBlob=blob;$('#drawing-video-result').hidden=false;
   $('#drawing-video-info').textContent=`${transfer.slots.length} frames · 24 fps`;
+  await saveEditorFiles([new File([blob],'references.mp4',{type:'video/mp4'}),new File([portableJSON()],'scene.json',{type:'application/json'})],filename('-references.zip'),signal);
   refreshTransfer();status('References ready.');
  }finally{images.clear();canvas.width=1;canvas.height=1;}
 }
@@ -201,15 +227,10 @@ async function importDrawingVideo(file,signal){
  await flushSave();status(`${frames.length} drawings imported.${resized?' Resized to fit.':''}`);
 }
 async function exportClip(signal){
- requireArt();const duration=clip.duration;
- status('Encoding animation…');await probeMP4(p().audioMode!=='silent'&&!(p().audioMode==='robot'&&animationSettings(p()).mode==='silent'));signal.throwIfAborted();
- const [w,h]=dimensions(p()),canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
- const ctx=canvas.getContext('2d'),images=new ImageCache(state.art);
- try{
-  const audio=await selectedAudio(duration);
-  finalBlob=await exportMP4({canvas,duration,audio,signal,draw:async t=>{const img=await images.get(slotAt(clip,t).id);ctx.fillStyle=p().scene.background;ctx.fillRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);},onProgress:f=>{$('#progress').value=f;},onFallback:()=>status('Encoding in real time. Keep this tab open.')});
-  signal.throwIfAborted();if(finalUrl)URL.revokeObjectURL(finalUrl);finalUrl=URL.createObjectURL(finalBlob);$('#final-video').src=finalUrl;$('#export-result').hidden=false;status('Animation ready to save.');
- }finally{images.clear();canvas.width=1;canvas.height=1;}
+ requireArt();status('Encoding animation…');
+ finalBlob=await renderAnimation({...state,clip},{signal,audioContext:audioContext(),onProgress:pipelineProgress});
+ signal.throwIfAborted();if(finalUrl)URL.revokeObjectURL(finalUrl);finalUrl=URL.createObjectURL(finalBlob);$('#final-video').src=finalUrl;$('#export-result').hidden=false;
+ await saveEditorFiles([new File([finalBlob],filename('.mp4'),{type:'video/mp4'})],filename('.mp4'),signal);status('Animation saved.');
 }
 async function generatePerformance(signal,candidate=structuredClone(p())){
  if(candidate.animation)candidate.animation.mode='speech';candidate.audioMode='robot';
@@ -304,13 +325,19 @@ $('#import-artwork').onchange=e=>{
  run('Importing drawings…',async signal=>{
   requireClip();const videos=files.filter(f=>f.type.startsWith('video/')||/\.(mp4|mov|m4v)$/i.test(f.name));
   if(videos.length){if(files.length!==1)throw Error('Choose one video, or choose images together.');return importDrawingVideo(videos[0],signal);}
-  if(files.length>100)throw Error('Choose at most 100 images.');
+  if(files.length>2000||files.reduce((n,f)=>n+f.size,0)>256*1024*1024)throw Error('Use at most 2,000 images and 256 MB per scene.');
+  if(files.every(f=>/^\d+[-_]|\d+\.[^.]+$/.test(f.name))){
+   const ready=await attachArtwork({project:p(),clip,takes:state.takes,drawingSlots:currentDrawingSlots()},files,{signal,onProgress:pipelineProgress}),thumbs={};
+   for(const [id,blob]of Object.entries(ready.art)){signal.throwIfAborted();thumbs[id]=await thumbnail(blob);}
+   signal.throwIfAborted();state.art=ready.art;state.artThumbs=thumbs;state.video=null;cache?.clear();cache=null;invalidateVideo();
+   imports.forEach(i=>URL.revokeObjectURL(i.url));imports=[];order=[];renderImports();$('#show-art').checked=true;renderAssigned();refreshStats();showTab('finish');await renderPreview();await flushSave();status('Drawings loaded. Ready to export.');return;
+  }
   const next=[];
   try{for(const f of files){signal.throwIfAborted();const thumb=await thumbnail(f);next.push({id:uid(),name:f.name,blob:f,url:URL.createObjectURL(thumb)});}}catch(e){next.forEach(i=>URL.revokeObjectURL(i.url));throw e;}
   imports.forEach(i=>URL.revokeObjectURL(i.url));imports=next;order=[];renderImports();status('Tap images in reference order.');
  });
 };
-$('#zip').onclick=()=>run('Preparing image ZIP…',async signal=>{await prepareDrawings(signal);const files=slots().map((s,i)=>new File([state.refs[s.id]],`${String(i+1).padStart(2,'0')}-${s.id}.png`,{type:'image/png'}));files.push(new File([JSON.stringify({fps:clip.fps,exposures:clip.exposures,drawings:slots().map(s=>({id:s.id,mouths:s.state.mouths}))},null,2)],'timing.json'));download(await imageZip(files),filename('-drawings.zip'));status('Drawing ZIP downloaded.');});
+$('#zip').onclick=()=>run('Preparing image ZIP…',async signal=>{await prepareDrawings(signal);const files=slots().map((s,i)=>new File([state.refs[s.id]],`references/${String(i+1).padStart(4,'0')}.png`,{type:'image/png'}));files.push(new File([JSON.stringify({fps:clip.fps,exposures:clip.exposures,drawings:slots().map(s=>({id:s.id,mouths:s.state.mouths}))},null,2)],'timing.json'));const transfer=slots().length<=100?makeTransfer(p(),clip):null;if(transfer)transfer.id=slots()[0].id.slice(1);state.transfer=transfer;state.drawingOrder=slots().map(s=>s.id);files.push(new File([portableJSON()],'scene.json',{type:'application/json'}));await saveEditorFiles(files,filename('-drawings.zip'),signal);status('Drawing ZIP downloaded.');});
 $('#psd').onclick=()=>run('Building the layered drawing library…',async signal=>{await prepareDrawings(signal);if(slots().length>23)throw Error('For more than 23 drawings, use the image export to keep memory manageable');download(await layeredPSD(slots(),state.refs,...dimensions(p())),filename('-references.psd'));status('PSD downloaded. Trace each unique drawing; timing is rebuilt here.');});
 $('#contact-sheet').onclick=()=>run('Preparing contact sheet…',async signal=>{await prepareDrawings(signal);const c=document.createElement('canvas');c.width=1200;c.height=Math.ceil(slots().length/4)*350;const ctx=c.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,c.width,c.height);for(const [i,s]of slots().entries()){const img=await decodeImage(state.refs[s.id]),x=i%4*300,y=Math.floor(i/4)*350;ctx.drawImage(img,x+65,y,170,302);ctx.fillStyle='black';ctx.font='bold 22px Arial';ctx.fillText(String(i+1),x+140,y+332);}const b=await new Promise(r=>c.toBlob(r));download(b,filename('-contact-sheet.png'));status('Contact sheet downloaded.');});
 $('#import-gallery').onclick=e=>{const id=e.target.closest('[data-choose]')?.dataset.choose;if(!id)return;if(!order.includes(id)&&order.length>=slots().length)return status('All references are numbered. Unselect a drawing to replace it.');order=toggleSelection(order,id);renderImports();};
@@ -334,23 +361,34 @@ $('#share-video').onclick=()=>{if(finalBlob)shareFiles([new File([finalBlob],fil
 $('#save-project').onclick=()=>{if(animationEditor&&!animationEditor.finishEdits())return;return run('Preparing project backup…',async()=>{await flushSave();download(await packProject(state),filename('-project.zip'));status('Backup downloaded. It contains your scene, drawings, and sound.');});};
 $('#export-config').onclick=()=>{
  if(animationEditor&&!animationEditor.finishEdits())return;
- try{download(new Blob([exportConfig(p())],{type:'application/json'}),filename('-scene.json'));status('JSON exported.');}catch(e){status(e.message,true);}
+ try{download(new Blob([portableJSON()],{type:'application/json'}),filename('-scene.json'));status('JSON exported.');}catch(e){status(e.message,true);}
 };
 $('#example-config').onclick=()=>download(new Blob([JSON.stringify(exampleConfig,null,2)+'\n'],{type:'application/json'}),'example-scene.json');
 $('#load-config').onchange=e=>{
- const file=e.target.files[0];if(!file)return;
+ const files=[...e.target.files];if(!files.length)return;
  return run('Loading JSON scene…',async signal=>{
   try{
-   if(file.size>5_000_000)throw Error('Config file exceeds 5 MB.');
-   const candidate=parseConfig(await file.text());signal.throwIfAborted();
-   const takes=animationSettings(candidate).mode==='speech'?await generateSpeech(candidate,{signal,onProgress:n=>status(`Generating speech ${n}/${candidate.lines.filter(l=>l.text.trim()).length}…`)}):{};
-   candidate.slots=compileClip(candidate,takes).slots;signal.throwIfAborted();
-   // Do not touch the current project until parsing, speech and timing succeed.
-   if(animationEditor&&!animationEditor.finishEdits())return;
-   await flushSave();signal.throwIfAborted();await restore({project:candidate,takes});showTab('stage');await flushSave();status('JSON scene loaded.');
+   const configs=files.filter(f=>/\.json$/i.test(f.name)),media=files.filter(f=>!configs.includes(f));
+   if(configs.length>1)throw Error('Choose one scene JSON, or use Batch for multiple scenes.');
+   if(!configs.length&&animationEditor&&!animationEditor.finishEdits())return;
+   if(!configs.length&&!clip){pendingArtwork=media;status('Drawings selected. Open the scene JSON to continue.');return;}
+   let candidate;
+   if(configs.length){if(configs[0].size>5_000_000)throw Error('Config file exceeds 5 MB.');candidate=await prepareScene(await configs[0].text(),{signal,onProgress:pipelineProgress,allowNewDrawings:!media.length&&!pendingArtwork.length});}
+   else candidate={project:structuredClone(p()),clip,takes:state.takes,transfer:currentTransfer(),drawingSlots:currentDrawingSlots(),art:state.art};
+   const artwork=media.length?media:pendingArtwork;
+   if(artwork.length)candidate=await attachArtwork(candidate,artwork,{signal,onProgress:pipelineProgress});
+   const thumbs={};for(const [id,blob]of Object.entries(candidate.art)){signal.throwIfAborted();thumbs[id]=await thumbnail(blob);}
+   signal.throwIfAborted();if(animationEditor&&!animationEditor.finishEdits())return;
+   await flushSave();signal.throwIfAborted();await restore({...(!configs.length?state:{}),project:candidate.project,takes:candidate.takes,transfer:candidate.transfer,art:candidate.art,artThumbs:thumbs,video:null,drawingOrder:candidate.drawingSlots.map(s=>s.id)});pendingArtwork=[];
+   showTab(artwork.length?'finish':'stage');$('#show-art').checked=!!artwork.length;await renderPreview();await flushSave();status(artwork.length?'Drawings loaded. Ready to export.':candidate.needsReferences?'Scene changed. Create new references.':'JSON scene loaded.');
   }finally{e.target.value='';}
  });
 };
+$('#editor-mode').onclick=()=>setWorkspace('editor');$('#batch-mode-button').onclick=()=>setWorkspace('batch');
+$('#editor-output').hidden=!globalThis.showDirectoryPicker;
+$('#editor-output').onclick=async()=>{try{editorOutput=await showDirectoryPicker({id:'animation-editor-output',mode:'readwrite'});$('#editor-output-label').textContent=editorOutput.name;$('#editor-reset-output').hidden=false;}catch(e){if(e.name!=='AbortError')status(e.message,true);}};
+$('#editor-reset-output').onclick=()=>{editorOutput=null;$('#editor-output-label').textContent='Downloads';$('#editor-reset-output').hidden=true;};
+batchUI=setupBatch({run,status,onProgress:value=>{$('#progress').value=value;}});
 $('#open-project').onchange=e=>run('Opening project…',async()=>{const f=e.target.files[0];if(f){if(animationEditor&&!animationEditor.finishEdits())return;await flushSave();await restore(await unpackProject(f));$('.project-tools details').open=false;if(!state.video)status('Project restored.');}e.target.value='';});
 $('#new').onclick=()=>{if(animationEditor&&!animationEditor.finishEdits())return;return run('Starting a new clip…',async()=>{await flushSave();await restore({project:newProject()});imports=[];order=[];renderImports();undo=[];redo=[];showTab('stage');status('New clip. Defaults restored; your previous clip is saved.');});};
 $('#duplicate').onclick=()=>{if(animationEditor&&!animationEditor.finishEdits())return;return run('Duplicating this scene…',async()=>{await flushSave();const project=structuredClone(p());project.id=uid();project.title+=' — next shot';await restore({...state,project});showTab('stage');status('Scene duplicated. Your previous clip is saved; change this framing for your next shot.');});};

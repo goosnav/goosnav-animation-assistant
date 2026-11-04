@@ -1,6 +1,7 @@
 import {newProject,validateProject,uid} from './core.mjs';
 import {ACTOR_CHANNELS,PROP_CHANNELS,MOTION_PRESETS,animationSettings,addGesture,addWalk} from './motion.mjs';
 import {EMOTIONS} from './emotions.mjs';
+import {makeHandoff,validateHandoff} from './handoff.mjs';
 
 const FORMAT='goosnav-animation-config',MAX_BYTES=5_000_000;
 const fail=(path,message)=>{throw Error(`${path}: ${message}`);};
@@ -67,11 +68,11 @@ function validateActions(actions,count,scene){
 }
 
 /** Parse a portable scene recipe without changing the current project or generating speech. */
-export function parseConfig(text){
+export function parseConfigDocument(text){
  if(typeof text!=='string')fail('config','expected JSON text');
  if(text.length>MAX_BYTES||new TextEncoder().encode(text).length>MAX_BYTES)fail('config','file exceeds 5 MB');
  let data;try{data=JSON.parse(text);}catch{fail('config','invalid JSON');}
- inspect(data);fields(data,['format','version','title','fps','rate','scene','dialogue','timing','actions','keys','guides','overrides','audio'],'config');
+ inspect(data);fields(data,['format','version','title','fps','rate','scene','dialogue','timing','actions','keys','guides','overrides','audio','handoff'],'config');
  if(data.format!==FORMAT||data.version!==1)fail('config','unsupported format or version');
  if(data.fps!==undefined&&data.fps!==24)fail('fps','this app uses 24 fps');
  if(data.actions!==undefined&&data.keys!==undefined)fail('config','use actions or exact keys, not both');
@@ -129,17 +130,22 @@ export function parseConfig(text){
    }catch(error){fail(`actions[${i}]`,error.message);}
   });
  }
- return validateProject(p);
+ const handoff=data.handoff===undefined?null:validateHandoff(data.handoff);
+ return {project:validateProject(p),handoff};
 }
 
-/** Export setup only; reference drawings, recordings, speech takes and identity stay in ZIP backups. */
-export function exportConfig(project){
+/** Backward-compatible recipe parsing; callers importing artwork use parseConfigDocument. */
+export function parseConfig(text){return parseConfigDocument(text).project;}
+
+/** Export editable setup, plus portable reference order/timing when a compiled clip is supplied. */
+export function exportConfig(project,{clip,takes={},transfer=null,drawingSlots}={}){
  validateProject(project);
  const animation=animationSettings(project);
  const data={format:FORMAT,version:1,title:project.title,fps:project.fps,rate:project.rate,scene:project.scene,
   dialogue:project.lines.map(({id,...line})=>line),timing:{mode:animation.mode,duration:animation.duration,drawings:animation.drawings},keys:animation.keys,
   ...(project.guides!==undefined?{guides:project.guides}:{}),overrides:project.overrides,
-  audio:{mode:project.audioMode,offset:project.audioOffset,trimStart:project.audioTrimStart,trimEnd:project.audioTrimEnd}};
+  audio:{mode:project.audioMode,offset:project.audioOffset,trimStart:project.audioTrimStart,trimEnd:project.audioTrimEnd},
+  ...(clip?{handoff:makeHandoff(project,clip,takes,transfer,drawingSlots)}:{})};
  const text=JSON.stringify(data,null,2)+'\n';
  // Keep every exported file importable under the same bounds and strict schema.
  parseConfig(text);return text;
